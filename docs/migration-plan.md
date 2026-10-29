@@ -17,11 +17,11 @@ The old application uses Firebase Authentication, Firestore, and Storage. Its vi
 ## Migration phases
 
 1. **Foundation — started:** Next.js + TypeScript, Convex schema, server-side role checks, environment examples.
-2. **Identity — pending:** select and configure an authentication provider; provision citizens/officers/admins through a trusted process; remove demo login and client-controlled roles.
+2. **Authentication — initial source committed:** Convex Auth password provider, client provider, sign-in/sign-up UI, citizen profile provisioning and administrator-only officer provisioning. Convex deployment and generated code still need to be configured and tested.
 3. **Reports — initial backend added:** create/list reports, status history, officer feed, status updates, audit logs. Assignment and attachments remain to be implemented.
-4. **Complaints — initial backend added:** create, citizen-owned list, officer feed, status updates, and officer assignment. Messaging remains to be implemented.
+4. **Complaints — initial backend added:** create, citizen-owned list, officer feed, status updates, and officer assignment. Messaging for complaints remains to be implemented.
 5. **Notice board — initial backend added:** public-only and officer-only feeds, plus officer-created notices.
-6. **Messaging and attachments — pending:** participant-only reads/writes, file validation, private storage URLs, abuse controls, read receipts.
+6. **Messaging — initial backend added:** report-linked conversations, participant-checked message reads/writes. Attachment handling, read receipts, complaint-linked chat and broader abuse controls remain pending.
 7. **Officer reports — pending:** drafts, submissions, evidence attachments, and audit history.
 8. **Android and deployment — pending:** validate Next.js static export compatibility, configure Capacitor native project, test camera/location/network/session behavior, then deploy.
 
@@ -38,16 +38,21 @@ The old application uses Firebase Authentication, Firestore, and Storage. Its vi
 
 The new repository now contains:
 - A mobile-first Community Policing starter UI.
-- A Convex schema for profiles, reports, report history, complaints, notices, conversations, messages, officer reports, and audit logs.
+- A Convex schema including Convex Auth tables and application data tables.
+- Convex Auth configuration with password sign-in/sign-up.
+- Citizen sign-in UI and first-login citizen profile creation.
 - Server-side identity, officer, and administrator guards.
 - Initial report and complaint mutations/queries and notice-board queries.
+- Participant-checked message operations.
 - A Capacitor configuration and static-export settings.
+- Setup notes for Convex deployment and trusted first-administrator provisioning.
 
 Still not configured or verified:
-- Authentication provider and trusted officer/admin provisioning.
-- Convex deployment and generated Convex client/server files.
-- End-to-end frontend integration with reports, complaints, notices, and messaging.
-- Attachment/storage access policy and retention procedures.
+- A live Convex deployment, generated Convex files, and environment variables.
+- First administrator bootstrap and end-to-end authentication tests.
+- Frontend integration for reports, complaints, notices and messaging beyond authentication.
+- Attachment/storage access policy, retention procedures, and session-storage review for Capacitor.
 - Vercel deployment and Android build.
+- Automated build, typecheck, and lint results.
 
 **Do not use production or real complainant data until authentication, access rules, and storage policies have been configured and tested.**
