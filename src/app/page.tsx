@@ -7,6 +7,7 @@ import {
   MessageCircle,
   ShieldCheck,
 } from "lucide-react";
+import AuthPanel from "@/components/AuthPanel";
 
 const actions = [
   {
@@ -73,12 +74,16 @@ export default function HomePage() {
             through community safety notices.
           </p>
           <a
-            href="#report"
+            href="#account"
             className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-[#102a43] transition hover:bg-slate-100"
           >
-            Explore reporting <ArrowRight size={17} aria-hidden="true" />
+            Sign in or register <ArrowRight size={17} aria-hidden="true" />
           </a>
         </div>
+
+        <section id="account" className="mt-6">
+          <AuthPanel enabled={Boolean(process.env.NEXT_PUBLIC_CONVEX_URL)} />
+        </section>
 
         <div className="mt-8 flex items-center justify-between gap-4">
           <div>
@@ -110,11 +115,11 @@ export default function HomePage() {
         </div>
 
         <section id="report" className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white/70 p-5 sm:p-6">
-          <h2 className="font-bold">Reporting will be enabled after secure setup</h2>
+          <h2 className="font-bold">Incident submission is the next workflow</h2>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            This starter screen does not submit or store incident reports. We will connect
-            reporting to Convex after authentication, access rules, and sensitive-data handling
-            have been defined and tested.
+            Sign-in and citizen profile creation are being wired first. Report submission,
+            complaint follow-up and messaging will be connected after the backend is deployed
+            and access rules have been tested.
           </p>
         </section>
 
