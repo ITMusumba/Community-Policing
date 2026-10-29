@@ -1,13 +1,12 @@
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireAdmin, requireUser } from "./lib/auth";
+import { requireAdmin } from "./lib/auth";
 
 export const me = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
-
     return await ctx.db
       .query("userProfiles")
       .withIndex("by_auth_subject", (q) => q.eq("authSubject", identity.subject))
@@ -20,8 +19,8 @@ export const me = query({
  * citizen here; role assignment is deliberately not accepted from the client.
  */
 export const ensureCitizenProfile = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { displayName: v.optional(v.string()) },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new ConvexError({ code: "UNAUTHENTICATED", message: "Sign in before creating a profile." });
@@ -39,10 +38,11 @@ export const ensureCitizenProfile = mutation({
       return existing._id;
     }
 
-    const displayName =
+    const requestedName = args.displayName?.trim();
+    const identityName =
       (typeof identity.name === "string" && identity.name.trim()) ||
-      (typeof identity.email === "string" && identity.email.trim()) ||
-      "Community member";
+      (typeof identity.email === "string" && identity.email.trim());
+    const displayName = (requestedName && requestedName.length >= 2 ? requestedName : identityName) || "Community member";
 
     const now = Date.now();
     const profileId = await ctx.db.insert("userProfiles", {
