@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
 
 function ConfiguredAuthPanel() {
   const { signIn, signOut } = useAuthActions();
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const profile = useQuery(api.profiles.me);
   const ensureCitizenProfile = useMutation(api.profiles.ensureCitizenProfile);
   const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
@@ -21,6 +22,25 @@ function ConfiguredAuthPanel() {
   useEffect(() => {
     if (profile && !profileReady) setProfileReady(true);
   }, [profile, profileReady]);
+
+  useEffect(() => {
+    if (!isAuthenticated || profile !== null || profileReady) return;
+    let cancelled = false;
+    const provision = async () => {
+      try {
+        await ensureCitizenProfile({
+          displayName: mode === "signUp" ? name.trim() : undefined,
+        });
+        if (!cancelled) setProfileReady(true);
+      } catch {
+        if (!cancelled) setNotice("Your sign-in is active. We could not finish setting up your profile yet; please retry shortly.");
+      }
+    };
+    void provision();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, profile, profileReady, ensureCitizenProfile, mode, name]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -37,6 +57,7 @@ function ConfiguredAuthPanel() {
       await signIn("password", {
         email: email.trim().toLowerCase(),
         password,
+        ...(mode === "signUp" ? { name: name.trim() } : {}),
         flow: mode,
       });
       setNotice(mode === "signUp" ? "Account created. Finishing your citizen profile…" : "Signed in successfully.");
@@ -47,26 +68,9 @@ function ConfiguredAuthPanel() {
     }
   };
 
-  useEffect(() => {
-    if (profile !== null || profileReady) return;
-    // Profile query returns undefined while loading and null for an authenticated
-    // account without an application profile. The mutation can only create citizens.
-    let cancelled = false;
-    const provision = async () => {
-      try {
-        await ensureCitizenProfile({});
-        if (!cancelled) setProfileReady(true);
-      } catch {
-        // An unauthenticated request or transient token refresh can fail here;
-        // the user can retry by refreshing or signing in again.
-      }
-    };
-    // The mutation is only invoked once the Convex query returns null.
-    void provision();
-    return () => {
-      cancelled = true;
-    };
-  }, [profile, ensureCitizenProfile, profileReady]);
+  if (authLoading) {
+    return <section className="rounded-2xl border border-[var(--line)] bg-white p-6 text-sm text-[var(--muted)]">Checking your sign-in status…</section>;
+  }
 
   if (profile && profile.isActive) {
     return (
@@ -117,52 +121,22 @@ function ConfiguredAuthPanel() {
         {mode === "signUp" && (
           <label className="block text-sm font-semibold">
             Full name
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              autoComplete="name"
-              required
-              minLength={2}
-              maxLength={120}
-              className="mt-1.5 min-h-12 w-full rounded-xl border border-[var(--line)] bg-white px-3 font-normal outline-none focus:border-[#176b87] focus:ring-2 focus:ring-cyan-100"
-              placeholder="Enter your name"
-            />
+            <input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required minLength={2} maxLength={120} className="mt-1.5 min-h-12 w-full rounded-xl border border-[var(--line)] bg-white px-3 font-normal outline-none focus:border-[#176b87] focus:ring-2 focus:ring-cyan-100" placeholder="Enter your name" />
           </label>
         )}
         <label className="block text-sm font-semibold">
           Email address
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="email"
-            required
-            className="mt-1.5 min-h-12 w-full rounded-xl border border-[var(--line)] bg-white px-3 font-normal outline-none focus:border-[#176b87] focus:ring-2 focus:ring-cyan-100"
-            placeholder="you@example.com"
-          />
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required className="mt-1.5 min-h-12 w-full rounded-xl border border-[var(--line)] bg-white px-3 font-normal outline-none focus:border-[#176b87] focus:ring-2 focus:ring-cyan-100" placeholder="you@example.com" />
         </label>
         <label className="block text-sm font-semibold">
           Password
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete={mode === "signUp" ? "new-password" : "current-password"}
-            minLength={8}
-            required
-            className="mt-1.5 min-h-12 w-full rounded-xl border border-[var(--line)] bg-white px-3 font-normal outline-none focus:border-[#176b87] focus:ring-2 focus:ring-cyan-100"
-            placeholder="At least 8 characters"
-          />
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "signUp" ? "new-password" : "current-password"} minLength={8} required className="mt-1.5 min-h-12 w-full rounded-xl border border-[var(--line)] bg-white px-3 font-normal outline-none focus:border-[#176b87] focus:ring-2 focus:ring-cyan-100" placeholder="At least 8 characters" />
         </label>
 
         {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
         {notice && <p role="status" className="rounded-xl bg-cyan-50 p-3 text-sm text-cyan-900">{notice}</p>}
 
-        <button
-          type="submit"
-          disabled={busy}
-          className="min-h-12 w-full rounded-xl bg-[#102a43] px-4 text-sm font-bold text-white transition hover:bg-[#176b87] disabled:cursor-wait disabled:opacity-60"
-        >
+        <button type="submit" disabled={busy} className="min-h-12 w-full rounded-xl bg-[#102a43] px-4 text-sm font-bold text-white transition hover:bg-[#176b87] disabled:cursor-wait disabled:opacity-60">
           {busy ? "Please wait…" : mode === "signUp" ? "Create citizen account" : "Sign in"}
         </button>
       </form>
@@ -185,6 +159,5 @@ export default function AuthPanel({ enabled }: { enabled: boolean }) {
       </section>
     );
   }
-
   return <ConfiguredAuthPanel />;
 }
