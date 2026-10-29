@@ -1,7 +1,7 @@
 "use client";
 
+import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
-import { ConvexProvider } from "convex/react";
 import { useMemo, type ReactNode } from "react";
 
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
@@ -13,8 +13,8 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
   );
 
   // Keep the starter UI usable before a Convex deployment is configured.
-  // Data-backed features must show an explicit unavailable state until configured.
+  // Protected operations must remain unavailable until Convex is configured.
   if (!client) return <>{children}</>;
 
-  return <ConvexProvider client={client}>{children}</ConvexProvider>;
+  return <ConvexAuthProvider client={client}>{children}</ConvexAuthProvider>;
 }
