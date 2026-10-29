@@ -1,6 +1,6 @@
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireOfficer, requireUser } from "./lib/auth";
+import { requireUser } from "./lib/auth";
 
 export const startForReport = mutation({
   args: { reportId: v.id("reports") },
@@ -16,9 +16,11 @@ export const startForReport = mutation({
     const officerId = report.assignedOfficerId ?? (isOfficer ? user._id : undefined);
     if (!officerId) throw new ConvexError("An officer must be assigned before a conversation can be opened.");
     const participants = [report.reporterId, officerId];
-    const existing = await ctx.db.query("conversations").collect();
+    const existing = await ctx.db
+      .query("conversations")
+      .withIndex("by_report", (q) => q.eq("reportId", args.reportId))
+      .collect();
     const conversation = existing.find((item) =>
-      item.reportId === args.reportId &&
       item.participantIds.length === 2 &&
       participants.every((id) => item.participantIds.some((participantId) => participantId === id))
     );
