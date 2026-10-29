@@ -20,6 +20,10 @@ function ConfiguredAuthPanel() {
   const [profileReady, setProfileReady] = useState(false);
 
   useEffect(() => {
+    if (!isAuthenticated) setProfileReady(false);
+  }, [isAuthenticated]);
+
+  useEffect(() => {
     if (profile && !profileReady) setProfileReady(true);
   }, [profile, profileReady]);
 
