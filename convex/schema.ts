@@ -19,14 +19,7 @@ export default defineSchema({
     reporterId: v.id("userProfiles"),
     title: v.string(),
     description: v.string(),
-    category: v.union(
-      v.literal("misconduct"),
-      v.literal("excessive_force"),
-      v.literal("corruption"),
-      v.literal("discrimination"),
-      v.literal("public_safety"),
-      v.literal("other")
-    ),
+    category: v.union(v.literal("misconduct"), v.literal("excessive_force"), v.literal("corruption"), v.literal("discrimination"), v.literal("public_safety"), v.literal("other")),
     priority: v.union(v.literal("low"), v.literal("medium"), v.literal("high"), v.literal("critical")),
     status: v.union(v.literal("pending"), v.literal("under_review"), v.literal("investigating"), v.literal("resolved"), v.literal("dismissed")),
     locationText: v.optional(v.string()),
@@ -81,7 +74,9 @@ export default defineSchema({
     reportId: v.optional(v.id("reports")),
     complaintId: v.optional(v.id("complaints")),
     updatedAt: v.number(),
-  }).index("by_updated_at", ["updatedAt"]),
+  })
+    .index("by_updated_at", ["updatedAt"])
+    .index("by_report", ["reportId"]),
 
   messages: defineTable({
     conversationId: v.id("conversations"),
