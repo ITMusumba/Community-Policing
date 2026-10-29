@@ -36,23 +36,10 @@ The old application uses Firebase Authentication, Firestore, and Storage. Its vi
 
 ## Current implementation status
 
-The new repository now contains:
-- A mobile-first Community Policing starter UI.
-- A Convex schema including Convex Auth tables and application data tables.
-- Convex Auth configuration with password sign-in/sign-up.
-- Citizen sign-in UI and first-login citizen profile creation.
-- Server-side identity, officer, and administrator guards.
-- Initial report and complaint mutations/queries and notice-board queries.
-- Participant-checked message operations.
-- A Capacitor configuration and static-export settings.
-- Setup notes for Convex deployment and trusted first-administrator provisioning.
-
-Still not configured or verified:
-- A live Convex deployment, generated Convex files, and environment variables.
-- First administrator bootstrap and end-to-end authentication tests.
-- Frontend integration for reports, complaints, notices and messaging beyond authentication.
-- Attachment/storage access policy, retention procedures, and session-storage review for Capacitor.
-- Vercel deployment and Android build.
-- Automated build, typecheck, and lint results.
+- **Steps 1–3 implemented in source:** anonymous-report schema and tracking, media storage references, report status history, nearest-station demo routing, and a manual 10-station Kampala/Kamuli seed.
+- **Step 4 implemented in source:** live district-scoped officer feed, area/category/status filters, audited quick actions, and anonymous replies; citizen quick-report, IndexedDB queue, GPS, camera/video, voice note, and tracking UI are added.
+- **Super-admin user management:** protected user listing, role changes, account disable/enable, and audit logs are implemented; password-reset email remains stubbed until a verified email provider is configured.
+- **Not yet verified:** Convex deployment/schema push, station seeding, first super-admin bootstrap, production media/face-blurring policy, offline upload retry edge cases, and end-to-end behavior.
+- Run `npm install`, configure `NEXT_PUBLIC_CONVEX_URL` and `CONVEX_SITE_URL`, then `npx convex dev` and `npm run dev`; run `npm run typecheck` and `npm run lint` once before calling this demo ready.
 
 **Do not use production or real complainant data until authentication, access rules, and storage policies have been configured and tested.**
