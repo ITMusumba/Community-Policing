@@ -2,21 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 
 const statusIcon: Record<string, string> = { received: "📥", seen: "👁️", assigned: "👮", en_route: "🚓", closed: "✅", duplicate: "🧩", false: "⚠️" };
 
 export default function TrackPage() {
-  const params = useSearchParams();
-  const code = (params.get("code") || "").toUpperCase();
+  const [code, setCode] = useState("");
   const [token, setToken] = useState("");
   const [body, setBody] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const addNote = useMutation(api.reports.addAnonymousNote);
   const uploadUrl = useMutation(api.reports.generateUploadUrl);
-  useEffect(() => { if (code) setToken(localStorage.getItem(`cp-track-${code}`) || ""); }, [code]);
+  useEffect(() => { const value = new URLSearchParams(window.location.search).get("code") || ""; const normalized = value.toUpperCase(); setCode(normalized); if (normalized) setToken(localStorage.getItem(`cp-track-${normalized}`) || ""); }, []);
   const data = useQuery(api.reports.trackAnonymous, code && token ? { code, token } : "skip");
 
   async function send() {
