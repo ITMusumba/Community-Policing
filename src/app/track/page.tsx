@@ -23,7 +23,7 @@ export default function TrackPage() {
       let storageId: string | undefined;
       let kind: "photo" | "voice" | undefined;
       if (file) {
-        const url = await uploadUrl({});
+        const url = await uploadUrl({ code, token });
         const response = await fetch(url, { method: "POST", headers: { "Content-Type": file.type }, body: file });
         if (!response.ok) throw new Error("Upload failed");
         storageId = (await response.json()).storageId;

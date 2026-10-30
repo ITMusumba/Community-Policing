@@ -48,9 +48,42 @@ async function assignArea(ctx: any, lat?: number, lng?: number, fallbackStationI
   }, null)?.station ?? null;
 }
 
+const MEDIA_LIMITS = {
+  photo: { max: 10 * 1024 * 1024, prefix: "image/" },
+  video: { max: 50 * 1024 * 1024, prefix: "video/" },
+  voice: { max: 10 * 1024 * 1024, prefix: "audio/" },
+} as const;
+async function validateMedia(ctx: any, storageId: any, kind: keyof typeof MEDIA_LIMITS) {
+  const meta = await ctx.db.system.get(storageId);
+  const limit = MEDIA_LIMITS[kind];
+  if (!meta || meta.size > limit.max || !String(meta.contentType ?? "").startsWith(limit.prefix)) {
+    throw new ConvexError("That file is not allowed. Use a smaller photo, video or voice note.");
+  }
+}
+
+/**
+ * Upload URLs are throttled: 30 per hour per anonymous device key, or per report when the caller proves
+ * ownership with the tracking code and secret token. File size and type are checked when the file is attached.
+ */
 export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => await ctx.storage.generateUploadUrl(),
+  args: { deviceHash: v.optional(v.string()), code: v.optional(v.string()), token: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    let key: string;
+    if (args.code && args.token) {
+      const report = await ctx.db.query("reports").withIndex("by_tracking_code", q => q.eq("trackingCode", args.code!.trim().toUpperCase())).unique();
+      if (!report || report.followUpTokenHash !== await tokenHash(args.token)) throw new ConvexError("Tracking code or secret token is invalid.");
+      key = `report:${report._id}`;
+    } else if (args.deviceHash && args.deviceHash.length >= 32 && args.deviceHash.length <= 128) {
+      key = `device:${args.deviceHash}`;
+    } else {
+      throw new ConvexError("Invalid anonymous device key.");
+    }
+    const now = Date.now();
+    const recent = await ctx.db.query("uploadLog").withIndex("by_key_created", q => q.eq("key", key).gt("createdAt", now - 60 * 60 * 1000)).collect();
+    if (recent.length >= 30) throw new ConvexError("Too many uploads. Please wait a little and try again.");
+    await ctx.db.insert("uploadLog", { key, createdAt: now });
+    return await ctx.storage.generateUploadUrl();
+  },
 });
 
 export const createAnonymousReport = mutation({
@@ -65,6 +98,8 @@ export const createAnonymousReport = mutation({
     const now = Date.now();
     const recent = await ctx.db.query("reports").withIndex("by_device_created", q => q.eq("deviceHash", args.deviceHash)).order("desc").take(10);
     if (recent.filter(r => r.createdAt > now - 60 * 60 * 1000).length >= 5) throw new ConvexError("Please wait before sending more reports from this device.");
+    if (args.media.length > 8) throw new ConvexError("Too many attachments.");
+    for (const item of args.media) await validateMedia(ctx, item.storageId, item.kind);
     const station = await assignArea(ctx, args.latitude, args.longitude, args.fallbackStationId);
     const token = randomToken();
     let trackingCode = makeTrackingCode();
@@ -107,6 +142,9 @@ export const addAnonymousNote = mutation({
     const body = args.body?.trim().slice(0, 3000);
     if (!body && !args.storageId) throw new ConvexError("Add a message or attachment.");
     const now = Date.now();
+    const recentNotes = await ctx.db.query("reportNotes").withIndex("by_report_created", q => q.eq("reportId", report._id).gt("createdAt", now - 60 * 60 * 1000)).collect();
+    if (recentNotes.filter(n => n.author === "citizen").length >= 20) throw new ConvexError("Too many updates. Please wait a little and try again.");
+    if (args.storageId) await validateMedia(ctx, args.storageId, args.kind ?? "photo");
     await ctx.db.insert("reportNotes", { reportId: report._id, author: "citizen", body, storageId: args.storageId, createdAt: now });
     if (args.storageId && args.kind) await ctx.db.insert("reportMedia", { reportId: report._id, storageId: args.storageId, kind: args.kind, createdAt: now });
     await ctx.db.patch(report._id, { updatedAt: now });
@@ -128,11 +166,22 @@ export const officerFeed = query({
         : officer.district
           ? await ctx.db.query("reports").withIndex("by_district_created", q => q.eq("district", officer.district!)).order("desc").take(200)
           : [];
-    return base.filter(r =>
+    const rows = base.filter(r =>
       (officer.role === "admin" || officer.role === "super_admin" || r.district === officer.district) &&
       (!args.subcounty || r.subcounty === args.subcounty) && (!args.parish || r.parish === args.parish) &&
       (!args.category || r.category === args.category) && (!args.status || r.status === args.status)
-    );
+    ).slice(0, 100);
+    // Never send the device key or the follow-up token hash to officers.
+    return await Promise.all(rows.map(async row => {
+      const { deviceHash: _deviceHash, followUpTokenHash: _tokenHash, ...safe } = row;
+      const mediaItems = await ctx.db.query("reportMedia").withIndex("by_report_created", q => q.eq("reportId", row._id)).collect();
+      const noteItems = await ctx.db.query("reportNotes").withIndex("by_report_created", q => q.eq("reportId", row._id)).order("asc").collect();
+      return {
+        ...safe,
+        media: await Promise.all(mediaItems.map(async m => ({ _id: m._id, kind: m.kind, url: await ctx.storage.getUrl(m.storageId) }))),
+        notes: await Promise.all(noteItems.map(async n => ({ _id: n._id, author: n.author, body: n.body, createdAt: n.createdAt, url: n.storageId ? await ctx.storage.getUrl(n.storageId) : null }))),
+      };
+    }));
   },
 });
 
@@ -144,7 +193,7 @@ export const officerAction = mutation({
     if (!report) throw new ConvexError("Report not found.");
     if (actor.role !== "admin" && actor.role !== "super_admin" && report.district !== actor.district) throw new ConvexError("Report is outside your district.");
     const now = Date.now();
-    const nextStatus = args.action === "en_route" ? "en_route" : args.action === "close" ? "closed" : args.action === "duplicate" ? "duplicate" : args.action === "false" ? "false" : args.action === "assign_me" ? "assigned" : report.status;
+    const nextStatus = args.action === "en_route" ? "en_route" : args.action === "close" ? "closed" : args.action === "duplicate" ? "duplicate" : args.action === "false" ? "false" : args.action === "assign_me" ? "assigned" : args.action === "verify" && report.status === "received" ? "seen" : report.status;
     let assignedOfficerId = report.assignedOfficerId;
     if (args.action === "assign_me") assignedOfficerId = actor._id;
     if (args.officerId) {
@@ -167,7 +216,10 @@ export const replyToAnonymousReport = mutation({
     if (!report || (officer.role !== "admin" && officer.role !== "super_admin" && report.district !== officer.district)) throw new ConvexError("Report not available.");
     const body = args.body.trim().slice(0, 3000);
     if (!body) throw new ConvexError("Reply cannot be empty.");
-    await ctx.db.insert("reportNotes", { reportId: report._id, author: "officer", body, createdAt: Date.now() });
+    const now = Date.now();
+    await ctx.db.insert("reportNotes", { reportId: report._id, author: "officer", body, createdAt: now });
+    await ctx.db.patch(report._id, { updatedAt: now });
+    await ctx.db.insert("auditLogs", { actorId: officer._id, action: "report.reply", entityType: "report", entityId: report._id, createdAt: now });
     return { success: true };
   },
 });

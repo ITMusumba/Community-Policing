@@ -34,4 +34,7 @@ This repository currently contains the project blueprint only. Never commit cred
 
 ## Status
 
-Project initialization; implementation has not yet been migrated from PoliceWatch.
+Working demo deployed on Vercel with a Convex backend. Built so far: anonymous quick report with photo/video/voice and offline retry,
+tracking and anonymous follow-up, police district feed with evidence and actions, super-admin user and officer management.
+Still to build (see apprules.md): durable offline media queue, all eight languages and audio prompts, map pin, duplicate grouping,
+station map, dashboards, Android build, retention rules. See docs/authentication.md for the super-admin bootstrap.

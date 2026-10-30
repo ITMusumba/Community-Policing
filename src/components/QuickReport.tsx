@@ -73,7 +73,7 @@ export default function QuickReport() {
   }, []);
 
   async function upload(blob: Blob, kind: MediaItem["kind"]) {
-    const url = await generateUploadUrl({});
+    const url = await generateUploadUrl({ deviceHash: await hashDeviceId() });
     const response = await fetch(url, { method: "POST", headers: { "Content-Type": blob.type || (kind === "voice" ? "audio/webm" : "application/octet-stream") }, body: blob });
     if (!response.ok) throw new Error("Upload failed");
     return { storageId: (await response.json()).storageId as string, kind };

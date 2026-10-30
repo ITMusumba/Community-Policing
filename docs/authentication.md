@@ -36,17 +36,40 @@ The exact URLs are provided by your own Convex deployment. Do not use the exampl
 - Officer provisioning requires an existing administrator and checks for duplicate badge numbers.
 - Never store plaintext passwords or copy the old Firebase officer creation function.
 
-## First administrator bootstrap
+## Identity and profiles
 
-The first administrator must be provisioned by a trusted project operator, not by an unauthenticated public function. Recommended controlled procedure:
+Convex Auth issues a token whose `subject` is `userId|sessionId`, which changes on every sign-in. Profiles are therefore
+keyed by the stable Convex Auth user id (`userProfiles.userId`, index `by_user_id`) read with `getAuthUserId`, never by `subject`.
+The legacy `authSubject` field is optional and only kept for old rows. To backfill any old rows once:
 
-1. Sign up with the intended administrator email through the app after the Convex deployment is configured.
-2. Identify that account in the Convex Auth `users` table in the Convex dashboard.
-3. Using the authenticated user's stable subject (the ID represented in the identity's `subject` claim), create or update the matching `userProfiles` record with `role: "admin"` and `isActive: true` through a restricted, audited operator process.
-4. Confirm the account can access administrator-only operations and an ordinary citizen account cannot.
-5. Remove or disable any temporary bootstrap access used during setup.
+```bash
+npx convex run profiles:backfillUserIds
+```
 
-Do not add a public “make me admin” mutation. Do not grant administrator access based only on an email address supplied by a client.
+## First super administrator bootstrap
+
+There is no public way to become an administrator. The first super admin is created by the project operator from a terminal,
+through an internal Convex function that the web app cannot call:
+
+1. Sign up with the intended email on the live site (`/super-admin` or the citizen app). This creates a citizen account.
+2. Run, against the deployment you want (add `--prod` for production):
+
+   ```bash
+   npx convex run --prod superAdmin:bootstrap '{"email":"you@example.com"}'
+   ```
+
+3. Sign in at `/super-admin`. The function refuses to run again once a super admin exists unless `{"force":true}` is passed,
+   and writes an audit log entry.
+
+Required Convex environment variables: `CONVEX_SITE_URL`, `JWT_PRIVATE_KEY` and `JWKS` (generate the key pair with
+`npx @convex-dev/auth`).
+
+## Creating officers
+
+1. The officer registers as a citizen on the citizen app.
+2. At `/super-admin`, the super admin sets the account's role to officer (or admin).
+3. The super admin then picks the officer's station and badge number. The district is taken from the station.
+4. The officer signs in at `/police` (staff sign-in only, no registration there). A plain officer sees only reports in their district.
 
 ## Before production
 

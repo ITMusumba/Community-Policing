@@ -1,6 +1,6 @@
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireOfficer } from "./lib/auth";
+import { requireAdmin, requireOfficer } from "./lib/auth";
 
 export const publicFeed = query({
   args: {},
@@ -34,7 +34,7 @@ export const create = mutation({
     published: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const author = await requireOfficer(ctx);
+    const author = await requireAdmin(ctx);
     const title = args.title.trim();
     const body = args.body.trim();
     if (title.length < 4 || title.length > 160) throw new ConvexError("Title must be between 4 and 160 characters.");

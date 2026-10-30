@@ -1,15 +1,17 @@
 import { v, ConvexError } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
+import type { Id } from "./_generated/dataModel";
 import { requireAdmin } from "./lib/auth";
 
 export const me = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
     return await ctx.db
       .query("userProfiles")
-      .withIndex("by_auth_subject", (q) => q.eq("authSubject", identity.subject))
+      .withIndex("by_user_id", (q) => q.eq("userId", userId))
       .unique();
   },
 });
@@ -21,14 +23,15 @@ export const me = query({
 export const ensureCitizenProfile = mutation({
   args: { displayName: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
+    if (!userId || !identity) {
       throw new ConvexError({ code: "UNAUTHENTICATED", message: "Sign in before creating a profile." });
     }
 
     const existing = await ctx.db
       .query("userProfiles")
-      .withIndex("by_auth_subject", (q) => q.eq("authSubject", identity.subject))
+      .withIndex("by_user_id", (q) => q.eq("userId", userId))
       .unique();
 
     if (existing) {
@@ -46,7 +49,7 @@ export const ensureCitizenProfile = mutation({
 
     const now = Date.now();
     const profileId = await ctx.db.insert("userProfiles", {
-      authSubject: identity.subject,
+      userId,
       displayName: displayName.slice(0, 120),
       role: "citizen",
       isActive: true,
@@ -73,7 +76,7 @@ export const ensureCitizenProfile = mutation({
  */
 export const provisionOfficer = mutation({
   args: {
-    authSubject: v.string(),
+    email: v.string(),
     displayName: v.string(),
     badgeNumber: v.string(),
     station: v.optional(v.string()),
@@ -91,9 +94,14 @@ export const provisionOfficer = mutation({
       throw new ConvexError("Badge number format is invalid.");
     }
 
+    const email = args.email.trim();
+    const user =
+      (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email)).unique()) ??
+      (await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email.toLowerCase())).unique());
+    if (!user) throw new ConvexError("That person must sign up before they can be made an officer.");
     const existingProfile = await ctx.db
       .query("userProfiles")
-      .withIndex("by_auth_subject", (q) => q.eq("authSubject", args.authSubject))
+      .withIndex("by_user_id", (q) => q.eq("userId", user._id))
       .unique();
     if (existingProfile) throw new ConvexError("An account profile already exists for this identity.");
 
@@ -104,7 +112,7 @@ export const provisionOfficer = mutation({
     if (existingBadge) throw new ConvexError("That badge number is already registered.");
 
     const profileId = await ctx.db.insert("userProfiles", {
-      authSubject: args.authSubject,
+      userId: user._id,
       displayName,
       role: "officer",
       badgeNumber,
@@ -124,5 +132,25 @@ export const provisionOfficer = mutation({
     });
 
     return profileId;
+  },
+});
+
+/**
+ * One-off, CLI-only: copies the user id out of legacy "userId|sessionId" subjects.
+ * Run: npx convex run profiles:backfillUserIds
+ */
+export const backfillUserIds = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    let updated = 0;
+    for (const profile of await ctx.db.query("userProfiles").collect()) {
+      if (profile.userId || !profile.authSubject) continue;
+      const user = await ctx.db.get(profile.authSubject.split("|")[0] as Id<"users">).catch(() => null);
+      if (user) {
+        await ctx.db.patch(profile._id, { userId: user._id });
+        updated++;
+      }
+    }
+    return { updated };
   },
 });

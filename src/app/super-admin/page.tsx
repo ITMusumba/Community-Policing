@@ -11,6 +11,9 @@ export default function SuperAdminPage() {
   const users = useQuery(api.superAdmin.listUsers, isAuthenticated && profile?.role === "super_admin" ? {} : "skip");
   const setActive = useMutation(api.superAdmin.setUserActive);
   const setRole = useMutation(api.superAdmin.setUserRole);
+  const setDetails = useMutation(api.superAdmin.setOfficerDetails);
+  const stations = useQuery(api.reports.publicStations, isAuthenticated && profile?.role === "super_admin" ? {} : "skip");
+  const [edits, setEdits] = useState<Record<string, { stationId?: string; badge?: string }>>({});
   const [message, setMessage] = useState("");
   if (isLoading) return <main className="p-6">Loading…</main>;
   if (!isAuthenticated || !profile) return <main className="mx-auto max-w-xl p-5"><h1 className="mb-4 text-2xl font-black">Super-admin sign in</h1><AuthPanel enabled /></main>;
@@ -24,6 +27,11 @@ export default function SuperAdminPage() {
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-black">{user.displayName}</h2><p className="text-sm text-slate-500">{user.district || "No district"} · {user.station || "No station"}</p><p className="mt-1 text-xs">{user.isActive ? "🟢 Active" : "🔴 Disabled"} · {user.badgeNumber || "No badge"}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold">{user.role}</span></div>
       <div className="mt-3 flex flex-wrap gap-2"><select aria-label={`Role for ${user.displayName}`} disabled={user.role === "super_admin"} defaultValue={user.role === "super_admin" ? "admin" : user.role} onChange={async e=>{try{await setRole({userId:user._id,role:e.target.value as "citizen"|"officer"|"admin"});setMessage("Role updated.");}catch(err){setMessage(err instanceof Error?err.message:"Could not update role.");}}} className="min-h-11 rounded-lg border p-2"><option value="citizen">Citizen</option><option value="officer">Officer</option><option value="admin">Admin</option></select>
       <button disabled={user.role === "super_admin"} onClick={async()=>{try{await setActive({userId:user._id,isActive:!user.isActive});setMessage(user.isActive?"Account disabled.":"Account enabled.");}catch(err){setMessage(err instanceof Error?err.message:"Could not update account.");}}} className="min-h-11 rounded-lg bg-[#102a43] px-4 font-bold text-white">{user.isActive ? "Disable account" : "Enable account"}</button></div>
+      {(user.role === "officer" || user.role === "admin") && <div className="mt-3 flex flex-wrap gap-2">
+        <select aria-label={`Station for ${user.displayName}`} value={edits[user._id]?.stationId ?? user.stationId ?? ""} onChange={e=>setEdits(old=>({...old,[user._id]:{...old[user._id],stationId:e.target.value}}))} className="min-h-11 rounded-lg border border-slate-300 bg-white p-2"><option value="">No station</option>{stations?.map(s=><option key={s._id} value={s._id}>{s.name} · {s.district}</option>)}</select>
+        <input aria-label={`Badge number for ${user.displayName}`} placeholder="Badge number" value={edits[user._id]?.badge ?? user.badgeNumber ?? ""} onChange={e=>setEdits(old=>({...old,[user._id]:{...old[user._id],badge:e.target.value}}))} className="min-h-11 rounded-lg border border-slate-300 bg-white p-2" />
+        <button onClick={async()=>{try{await setDetails({userId:user._id,stationId:((edits[user._id]?.stationId ?? user.stationId) || undefined) as never,badgeNumber:(edits[user._id]?.badge ?? user.badgeNumber) || undefined});setMessage("Officer details saved.");}catch(err){setMessage(err instanceof Error?err.message:"Could not save details.");}}} className="min-h-11 rounded-lg bg-[#102a43] px-4 font-bold text-white">Save details</button>
+      </div>}
     </article>)}</div>
     {users?.length === 0 && <p className="mt-5">No user profiles yet.</p>}
     <a href="/" className="mt-6 inline-block font-bold underline">← Citizen app</a>

@@ -5,7 +5,7 @@ import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
 
-function ConfiguredAuthPanel() {
+function ConfiguredAuthPanel({ staffOnly }: { staffOnly: boolean }) {
   const { signIn, signOut } = useAuthActions();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const profile = useQuery(api.profiles.me);
@@ -106,20 +106,20 @@ function ConfiguredAuthPanel() {
     <section className="rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm sm:p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold">Citizen account</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">Sign in or create an account to get started.</p>
+          <h2 className="text-xl font-bold">{staffOnly ? "Staff sign in" : "Citizen account"}</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">{staffOnly ? "Sign in with the account an administrator has enabled for you." : "Sign in or create an account to get started."}</p>
         </div>
         <span className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Secure access</span>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
+      {!staffOnly && <div className="mt-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
         <button type="button" onClick={() => { setMode("signIn"); setError(""); }} className={`min-h-10 rounded-lg text-sm font-semibold ${mode === "signIn" ? "bg-white text-[#102a43] shadow-sm" : "text-slate-600"}`}>
           Sign in
         </button>
         <button type="button" onClick={() => { setMode("signUp"); setError(""); }} className={`min-h-10 rounded-lg text-sm font-semibold ${mode === "signUp" ? "bg-white text-[#102a43] shadow-sm" : "text-slate-600"}`}>
           Create account
         </button>
-      </div>
+      </div>}
 
       <form onSubmit={submit} className="mt-5 space-y-4">
         {mode === "signUp" && (
@@ -146,13 +146,15 @@ function ConfiguredAuthPanel() {
       </form>
 
       <p className="mt-4 text-xs leading-5 text-[var(--muted)]">
-        Registration creates a citizen account only. Officer and administrator access must be granted separately by an authorized administrator.
+        {staffOnly
+          ? "New staff must first register on the citizen app. An administrator then enables police access for that account."
+          : "Registration creates a citizen account only. Officer and administrator access must be granted separately by an authorized administrator."}
       </p>
     </section>
   );
 }
 
-export default function AuthPanel({ enabled }: { enabled: boolean }) {
+export default function AuthPanel({ enabled, staffOnly = false }: { enabled: boolean; staffOnly?: boolean }) {
   if (!enabled) {
     return (
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6">
@@ -163,5 +165,5 @@ export default function AuthPanel({ enabled }: { enabled: boolean }) {
       </section>
     );
   }
-  return <ConfiguredAuthPanel />;
+  return <ConfiguredAuthPanel staffOnly={staffOnly} />;
 }

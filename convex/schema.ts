@@ -19,7 +19,9 @@ export default defineSchema({
   ...authTables,
 
   userProfiles: defineTable({
-    authSubject: v.string(),
+    // Stable Convex Auth user id. authSubject is legacy ("userId|sessionId", changes per session).
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
     displayName: v.string(),
     role: v.union(v.literal("citizen"), v.literal("officer"), v.literal("admin"), v.literal("super_admin")),
     badgeNumber: v.optional(v.string()),
@@ -29,6 +31,7 @@ export default defineSchema({
     isActive: v.boolean(),
     createdAt: v.number(),
   })
+    .index("by_user_id", ["userId"])
     .index("by_auth_subject", ["authSubject"])
     .index("by_badge_number", ["badgeNumber"])
     .index("by_role", ["role"])
@@ -164,6 +167,11 @@ export default defineSchema({
   })
     .index("by_author_updated", ["authorId", "updatedAt"])
     .index("by_related_report", ["relatedReportId"]),
+
+  uploadLog: defineTable({
+    key: v.string(),
+    createdAt: v.number(),
+  }).index("by_key_created", ["key", "createdAt"]),
 
   auditLogs: defineTable({
     actorId: v.optional(v.id("userProfiles")),

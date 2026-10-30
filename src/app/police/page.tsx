@@ -31,7 +31,7 @@ export default function PolicePage() {
   const parishes = useMemo(() => [...new Set(reports.filter(r => (!district || r.district === district) && (!subcounty || r.subcounty === subcounty)).map(r => r.parish).filter(Boolean))] as string[], [reports, district, subcounty]);
 
   if (isLoading) return <main className="p-6">Loading secure police access…</main>;
-  if (!isAuthenticated || !profile) return <main className="mx-auto max-w-xl p-4"><h1 className="mb-4 text-2xl font-black">👮 Police sign in</h1><AuthPanel enabled={true} /></main>;
+  if (!isAuthenticated || !profile) return <main className="mx-auto max-w-xl p-4"><h1 className="mb-4 text-2xl font-black">👮 Police sign in</h1><AuthPanel enabled={true} staffOnly /></main>;
   if (!["officer","admin","super_admin"].includes(profile.role)) return <main className="p-6">This account does not have police access.</main>;
 
   return <main className="h-screen snap-y snap-mandatory overflow-y-scroll bg-[#102a43] text-white">
@@ -47,11 +47,19 @@ export default function PolicePage() {
     {feed?.length === 0 && <section className="flex min-h-[75vh] snap-start flex-col items-center justify-center p-8 text-center"><span className="text-7xl">🛡️</span><h2 className="mt-5 text-2xl font-black">No reports in this view</h2><p className="mt-2">New reports appear here automatically.</p></section>}
     {reports.map(report => <section key={report._id} className="flex min-h-[calc(100vh-120px)] snap-start flex-col justify-between border-b border-white/15 p-4 sm:p-8">
       <div><div className="flex items-center justify-between gap-2"><span className="rounded-full bg-white/15 px-3 py-2 text-sm">{ago(report.createdAt)}</span><span className="text-sm">{report.status.replaceAll("_"," ")}</span></div>
-        <div className="mt-5 flex min-h-52 items-center justify-center rounded-3xl bg-white/10 text-8xl">{icons[report.category] || "❔"}{report.status === "received" && <span className="ml-2 text-3xl">📥</span>}</div>
+        <div className="mt-5 flex min-h-52 flex-wrap items-center justify-center gap-2 rounded-3xl bg-white/10 p-2 text-8xl">
+          {report.media.length === 0 && <>{icons[report.category] || "❔"}{report.status === "received" && <span className="ml-2 text-3xl">📥</span>}</>}
+          {report.media.map(m => !m.url ? null : m.kind === "photo"
+            ? <img key={m._id} src={m.url} alt="Evidence photo" className="max-h-72 max-w-full rounded-2xl object-contain" />
+            : m.kind === "video"
+              ? <video key={m._id} src={m.url} controls className="max-h-72 max-w-full rounded-2xl" />
+              : <audio key={m._id} src={m.url} controls className="w-full" />)}
+        </div>
         <h2 className="mt-4 text-2xl font-black">{report.category.replaceAll("_"," ")}</h2>
         <p className="mt-2 text-sm text-slate-200">{[report.parish,report.subcounty,report.district].filter(Boolean).join(" · ") || "Location unavailable"}</p>
         <p className="mt-1 text-xs text-slate-300">GPS accuracy: {report.accuracyM ? `±${Math.round(report.accuracyM)} m` : "not provided"} · {report.verified ? "Verified" : "Unverified"}</p>
         {report.latitude !== undefined && report.longitude !== undefined && <a className="mt-2 inline-block underline" href={`https://maps.google.com/?q=${report.latitude},${report.longitude}`} target="_blank" rel="noreferrer">📍 Open location</a>}
+        {report.notes.length > 0 && <div className="mt-4 space-y-2 rounded-2xl bg-white/10 p-3 text-sm">{report.notes.map(n => <p key={n._id}><strong>{n.author === "citizen" ? "Reporter" : "Police"}:</strong> {n.body}{n.url && <> · <a className="underline" href={n.url} target="_blank" rel="noreferrer">attachment</a></>}</p>)}</div>}
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {([["verify","✅ Verify"],["assign_me","👮 Assign to me"],["en_route","🚓 En route"],["close","✔️ Close"],["duplicate","🧩 Duplicate"],["false","⚠️ False/spam"]] as const).map(([key,label])=><button key={key} onClick={()=>void action({reportId:report._id,action:key})} className="min-h-12 rounded-xl bg-white px-3 text-sm font-bold text-[#102a43]">{label}</button>)}
         </div>

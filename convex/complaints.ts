@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireOfficer, requireUser } from "./lib/auth";
+import { requireAdmin, requireUser } from "./lib/auth";
 
 export const create = mutation({
   args: {
@@ -59,7 +59,7 @@ export const myComplaints = query({
 export const officerFeed = query({
   args: {},
   handler: async (ctx) => {
-    await requireOfficer(ctx);
+    await requireAdmin(ctx);
     return await ctx.db.query("complaints").withIndex("by_created_at").order("desc").take(100);
   },
 });
@@ -70,7 +70,7 @@ export const updateStatus = mutation({
     status: v.union(v.literal("open"), v.literal("in_progress"), v.literal("resolved"), v.literal("closed")),
   },
   handler: async (ctx, args) => {
-    const actor = await requireOfficer(ctx);
+    const actor = await requireAdmin(ctx);
     const complaint = await ctx.db.get(args.complaintId);
     if (!complaint) throw new ConvexError("Complaint not found.");
 
@@ -94,7 +94,7 @@ export const assignOfficer = mutation({
     officerId: v.id("userProfiles"),
   },
   handler: async (ctx, args) => {
-    const actor = await requireOfficer(ctx);
+    const actor = await requireAdmin(ctx);
     const target = await ctx.db.get(args.officerId);
     const complaint = await ctx.db.get(args.complaintId);
     if (!complaint) throw new ConvexError("Complaint not found.");
