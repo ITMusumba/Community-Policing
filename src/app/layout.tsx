@@ -8,6 +8,11 @@ export const metadata: Metadata = {
   description:
     "A mobile-first community safety platform for reporting incidents and following up securely.",
   applicationName: "COMPOLI",
+  icons: {
+    icon: [{ url: "/icons/icon.svg", type: "image/svg+xml" }, { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" }],
+    apple: "/icons/apple-touch-icon.png",
+  },
+  appleWebApp: { capable: true, title: "COMPOLI", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

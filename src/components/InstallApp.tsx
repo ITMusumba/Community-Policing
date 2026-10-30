@@ -22,6 +22,7 @@ export default function InstallApp() {
       || (navigator as Navigator & { standalone?: boolean }).standalone === true
       || "Capacitor" in window;
     setIos(/iphone|ipad|ipod/i.test(navigator.userAgent));
+    if ("serviceWorker" in navigator && !installed) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     setVisible(!installed);
     const onPrompt = (e: Event) => { e.preventDefault(); setPrompt(e as InstallPrompt); };
     const onInstalled = () => setVisible(false);
