@@ -3,10 +3,10 @@ import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Community Policing",
+  title: "COMPOLI · Community Policing",
   description:
     "A mobile-first community safety platform for reporting incidents and following up securely.",
-  applicationName: "Community Policing",
+  applicationName: "COMPOLI",
 };
 
 export const viewport: Viewport = {
@@ -25,6 +25,10 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ConvexClientProvider>{children}</ConvexClientProvider>
+        <footer className="bg-slate-50 px-4 pb-6 pt-2 text-center text-xs text-slate-500">
+          <p className="font-semibold uppercase tracking-wider">Community Policing</p>
+          <p className="mt-0.5">Keeping Ourselves and Communities Safe</p>
+        </footer>
       </body>
     </html>
   );

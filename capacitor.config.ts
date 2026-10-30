@@ -6,7 +6,7 @@ const serverUrl = process.env.CAP_SERVER_URL;
 
 const config: CapacitorConfig = {
   appId: "ug.communitypolicing.app",
-  appName: "Community Policing",
+  appName: "COMPOLI",
   webDir: "out",
   server: {
     androidScheme: "https",

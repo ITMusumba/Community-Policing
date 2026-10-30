@@ -169,14 +169,14 @@ export default function QuickReport() {
   const hasDescription = Boolean(description.trim() || voice);
   const Dots = () => <div className="flex items-center gap-2" aria-label={`Step ${step} of 3`}>{[1, 2, 3].map(n => <span key={n} className={`h-2.5 w-8 rounded-full ${n <= step ? "bg-[#176b87]" : "bg-slate-300"}`} />)}</div>;
   const header = <div className="flex items-center justify-between gap-3">
-    {step > 1 ? <button onClick={() => setStep(step === 3 ? 2 : 1)} className="min-h-12 rounded-xl border px-4 text-lg font-bold" aria-label="Back">←</button> : <h2 className="text-xl font-black">{t.title}</h2>}
+    {step > 1 ? <button onClick={() => setStep(step === 3 ? 2 : 1)} className="min-h-12 rounded-xl border px-4 text-lg font-bold" aria-label="Back">←</button> : <span aria-hidden="true" />}
     <Dots />
     <button className="min-h-12 rounded-xl border px-3 font-bold" onClick={() => setLanguage(language === "en" ? "lg" : "en")}>🌐 {language === "en" ? "EN" : "LG"}</button>
   </div>;
 
   return <div className="mx-auto max-w-xl px-4 py-5 pb-10">
     {step === 1 && <>
-      <h1 className="text-center text-4xl font-black tracking-[0.2em] text-[#102a43]">COMPOL</h1>
+      <h1 className="text-center text-4xl font-black tracking-[0.2em] text-[#102a43]">COMPOLI</h1>
       <a href="tel:999" className="mt-3 mb-5 flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 text-lg font-black text-white">🚨 {t.emergency}</a>
     </>}
     {header}
