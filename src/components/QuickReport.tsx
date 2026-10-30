@@ -9,7 +9,7 @@ const categories = [
   ["🥷", "theft"], ["🔪", "robbery"], ["🤕", "assault"], ["🏠", "domestic_violence"],
   ["🛑", "sexual_violence"], ["🚗", "accident"], ["🔥", "fire"], ["💊", "drugs"],
   ["👁️", "suspicious_activity"], ["🐄", "livestock_theft"], ["🏡", "land_property_dispute"], ["🏠🔥", "arson"],
-  ["🗑️", "illegal_dumping"], ["💣", "terrorism"], ["❔", "other"],
+  ["🚯", "illegal_dumping"], ["💣", "terrorism"], ["❔", "other"],
 ] as const;
 type Category = typeof categories[number][1];
 type MediaItem = { storageId: string; kind: "photo" | "video" | "voice" };
