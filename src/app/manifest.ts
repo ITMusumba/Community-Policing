@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "COMPOLI",
     short_name: "COMPOLI",
-    description: "Community Policing — Keeping Ourselves and Communities Safe",
+    description: "Community Policing — Keeping Ourselves and Our Communities Safe",
     start_url: "/",
     display: "standalone",
     background_color: "#f8fafc",
