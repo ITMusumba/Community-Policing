@@ -163,5 +163,6 @@ export default function QuickReport() {
     {error && <p role="alert" className="mt-3 rounded-xl bg-red-100 p-3 text-red-800">{error}</p>}
     <button disabled={sending || (!position && !stationId)} onClick={() => void submit()} className="mt-5 min-h-16 w-full rounded-2xl bg-[#102a43] text-xl font-black text-white disabled:opacity-50">{sending ? "Sending…" : `📤 ${t.send}`}</button>
     <p className="mt-3 text-center text-xs text-slate-500">You can report without signing in. This app does not replace emergency services.</p>
+    <p className="mt-2 text-center text-xs text-slate-500"><a href="/account" className="font-bold underline">Police staff: sign in or create an account</a></p>
   </div>;
 }
