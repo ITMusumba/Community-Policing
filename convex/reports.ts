@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireOfficer } from "./lib/auth";
+import { distanceKm, locatePoint } from "./lib/geo";
 
 const category = v.union(
   v.literal("theft"), v.literal("robbery"), v.literal("assault"), v.literal("domestic_violence"),
@@ -28,13 +29,6 @@ function makeTrackingCode() {
   crypto.getRandomValues(bytes);
   return `CP-${Array.from(bytes.slice(0, 4), b => alphabet[b % alphabet.length]).join("")}-${String(10 + (bytes[4] % 90))}`;
 }
-function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const rad = (n: number) => n * Math.PI / 180;
-  const dLat = rad(lat2 - lat1), dLng = rad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-// TODO: replace nearest-station demo matching with UBOS administrative-boundary polygon lookup.
 async function assignArea(ctx: any, lat?: number, lng?: number, fallbackStationId?: any) {
   const stations = await ctx.db.query("stations").collect();
   if (fallbackStationId) {
@@ -121,6 +115,7 @@ export const createAnonymousReport = mutation({
     if (args.media.length > 8) throw new ConvexError("Too many attachments.");
     for (const item of args.media) await validateMedia(ctx, item.storageId, item.kind);
     const station = await assignArea(ctx, args.latitude, args.longitude, args.fallbackStationId);
+    const area = args.latitude !== undefined && args.longitude !== undefined ? await locatePoint(ctx, args.latitude, args.longitude) : null;
     const token = randomToken();
     let trackingCode = makeTrackingCode();
     for (let tries = 0; tries < 5 && await ctx.db.query("reports").withIndex("by_tracking_code", q => q.eq("trackingCode", trackingCode)).unique(); tries++) trackingCode = makeTrackingCode();
@@ -134,7 +129,7 @@ export const createAnonymousReport = mutation({
     const reportId = await ctx.db.insert("reports", {
       category, description, supportNote: missing.length ? `Unsupported — ${missing.join("; ")}` : undefined, status: "received", trackingCode, followUpTokenHash: await tokenHash(token),
       deviceHash: args.deviceHash, latitude: args.latitude, longitude: args.longitude, accuracyM: args.accuracyM,
-      stationId: station?._id, district: station?.district, subcounty: station?.subcounty, parish: station?.parish,
+      stationId: station?._id, district: area?.district ?? station?.district, subcounty: area?.subcounty ?? station?.subcounty, parish: area?.parish ?? station?.parish,
       verified: false, createdAt: now, updatedAt: now,
       priority: defaultPriority(category),
       referenceNumber: await nextReferenceNumber(ctx, station?.district, now),

@@ -174,3 +174,34 @@ export const handoverCases = mutation({
     return { moved: cases.length };
   },
 });
+
+export const listStationsForReview = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireSuperAdmin(ctx);
+    return (await ctx.db.query("stations").collect()).sort((a, b) => a.district.localeCompare(b.district) || a.name.localeCompare(b.name));
+  },
+});
+
+export const setStationsVerified = mutation({
+  args: { stationIds: v.array(v.id("stations")), verified: v.boolean() },
+  handler: async (ctx, args) => {
+    const actor = await requireSuperAdmin(ctx);
+    if (args.stationIds.length > 200) throw new ConvexError("Update at most 200 stations at a time.");
+    for (const id of args.stationIds) await ctx.db.patch(id, { verified: args.verified });
+    await ctx.db.insert("auditLogs", { actorId: actor._id, action: args.verified ? "station.verify" : "station.unverify", entityType: "station", entityId: args.stationIds[0] ?? "", details: `${args.stationIds.length} stations`, createdAt: Date.now() });
+    return { updated: args.stationIds.length };
+  },
+});
+
+export const deleteStation = mutation({
+  args: { stationId: v.id("stations") },
+  handler: async (ctx, args) => {
+    const actor = await requireSuperAdmin(ctx);
+    const inUse = await ctx.db.query("reports").withIndex("by_station_created", q => q.eq("stationId", args.stationId)).first();
+    if (inUse) throw new ConvexError("This station has reports. Unverify it instead of deleting.");
+    await ctx.db.delete(args.stationId);
+    await ctx.db.insert("auditLogs", { actorId: actor._id, action: "station.delete", entityType: "station", entityId: args.stationId, createdAt: Date.now() });
+    return { success: true };
+  },
+});

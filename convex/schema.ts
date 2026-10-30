@@ -89,7 +89,10 @@ export default defineSchema({
 
   stations: defineTable({
     name: v.string(),
-    type: v.union(v.literal("station"), v.literal("post"), v.literal("community_policing_point")),
+    type: v.union(
+      v.literal("station"), v.literal("post"), v.literal("community_policing_point"),
+      v.literal("headquarters"), v.literal("regional_hq"), v.literal("district_hq")
+    ),
     lat: v.number(),
     lng: v.number(),
     phone: v.optional(v.string()),
@@ -97,9 +100,34 @@ export default defineSchema({
     subcounty: v.string(),
     parish: v.string(),
     verified: v.boolean(),
+    source: v.optional(v.union(v.literal("osm"), v.literal("manual"))),
+    osmId: v.optional(v.string()),
   })
     .index("by_district", ["district"])
-    .index("by_name", ["name"]),
+    .index("by_name", ["name"])
+    .index("by_type", ["type"])
+    .index("by_osm_id", ["osmId"]),
+
+  // Uganda district > subcounty > parish names (UBOS 2016 boundaries). Loaded with `convex import`; see scripts/build-admin-data.mjs.
+  adminAreas: defineTable({
+    level: v.union(v.literal("district"), v.literal("subcounty"), v.literal("parish")),
+    district: v.string(),
+    county: v.optional(v.string()),
+    subcounty: v.optional(v.string()),
+    parish: v.optional(v.string()),
+    bbox: v.optional(v.array(v.number())),
+    lat: v.optional(v.number()),
+    lng: v.optional(v.number()),
+  })
+    .index("by_level_district", ["level", "district"])
+    .index("by_level_district_subcounty", ["level", "district", "subcounty"]),
+
+  // Simplified parish polygons, one or more documents per district (documents are capped at 1 MiB).
+  adminGeo: defineTable({
+    district: v.string(),
+    part: v.number(),
+    features: v.string(),
+  }).index("by_district", ["district"]),
 
   reportNotes: defineTable({
     reportId: v.id("reports"),
