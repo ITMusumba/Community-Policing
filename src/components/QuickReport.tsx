@@ -206,7 +206,7 @@ export default function QuickReport() {
       </label>
       <div className="mt-4 rounded-2xl bg-slate-100 p-4">
         <p className="font-bold">{position ? `📍 ${t.gpsOk} (±${Math.round(position.accuracyM)} m)` : gpsFailed ? `📍 ${t.gpsFailed}` : `📍 ${t.gpsWaiting}`}</p>
-        {gpsFailed && <label className="mt-2 block text-sm">{t.chooseStation}<select value={stationId} onChange={e => setStationId(e.target.value)} className="mt-2 min-h-12 w-full rounded-xl border bg-white p-2"><option value="">—</option>{stations?.map(s => <option key={s._id} value={s._id}>{s.name} — {s.district}</option>)}</select></label>}
+        {gpsFailed && <label className="mt-2 block text-sm">{t.chooseStation}<select value={stationId} onChange={e => setStationId(e.target.value)} className="mt-2 min-h-12 w-full rounded-xl border bg-white p-2"><option value="">—</option>{[...new Set((stations ?? []).map(s => s.district))].sort().map(d => <optgroup key={d} label={d}>{stations?.filter(s => s.district === d).map(s => <option key={s._id} value={s._id}>{s.name}</option>)}</optgroup>)}</select></label>}
       </div>
       {(!category || !hasDescription) && <p className="mt-3 rounded-xl border-2 border-amber-400 bg-amber-50 p-3 font-semibold text-amber-900">⚠️ {t.unsupportedWarn}</p>}
       {waiting && <p className="mt-3 rounded-xl bg-amber-100 p-3 font-bold">🕓 {t.waiting}</p>}
@@ -215,6 +215,6 @@ export default function QuickReport() {
     </>}
 
     <p className="mt-6 text-center text-xs text-slate-500">{t.anonNote}</p>
-    {step === 1 && <p className="mt-2 text-center text-xs text-slate-500"><a href="/account" className="font-bold underline">Police staff: sign in</a></p>}
+    {step === 1 && <p className="mt-2 text-center text-xs text-slate-500"><a href="/stations" className="font-bold underline">Find a police station</a> · <a href="/account" className="font-bold underline">Police staff: sign in</a></p>}
   </div>;
 }

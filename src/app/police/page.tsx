@@ -7,6 +7,7 @@ import { AlertTriangle, Ban, Car, CheckCircle2, Clock, Copy, ExternalLink, FileT
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import PoliceShell from "@/components/PoliceShell";
+import IncidentMap from "@/components/IncidentMap";
 import { CATEGORY_LABEL, PRIORITY, STATUS_LABEL, elapsed, responseState, type Priority } from "@/lib/police";
 
 const cats = ["theft","robbery","assault","domestic_violence","sexual_violence","accident","fire","drugs","suspicious_activity","livestock_theft","land_property_dispute","other"] as const;
@@ -129,6 +130,7 @@ function IncidentCard({ report: r, now }: { report: FeedRow; now: number }) {
         <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">Statements and correspondence ({r.notes.length})</summary>
         <ul className="divide-y divide-slate-100 text-sm">{r.notes.map(n => <li key={n._id} className="px-3 py-2"><span className="font-medium">{n.author === "citizen" ? "Reporter (anonymous)" : "Police"}</span> <span className="text-xs text-slate-500">{new Date(n.createdAt).toLocaleString("en-UG")}</span><p>{n.body}{n.url && <> <a className="text-blue-800 underline" href={n.url} target="_blank" rel="noreferrer">attachment</a></>}</p></li>)}</ul>
       </details>}
+      {r.latitude !== undefined && r.longitude !== undefined && <IncidentMap lat={r.latitude} lng={r.longitude} />}
       <details className="rounded border border-slate-200">
         <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-sm font-semibold"><FileText size={14} aria-hidden="true" />Occurrence log ({r.log.length})</summary>
         <ol className="divide-y divide-slate-100 font-mono text-xs">{r.log.map(l => <li key={l._id} className="px-3 py-1.5"><span className="text-slate-500">{new Date(l.createdAt).toLocaleString("en-UG")}</span> — {l.note ?? STATUS_LABEL[l.toStatus as keyof typeof STATUS_LABEL] ?? l.toStatus} — <span className="text-slate-600">{l.actor}</span></li>)}</ol>
