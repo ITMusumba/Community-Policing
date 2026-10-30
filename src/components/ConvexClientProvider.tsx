@@ -16,5 +16,7 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
   // Protected operations must remain unavailable until Convex is configured.
   if (!client) return <>{children}</>;
 
-  return <ConvexAuthProvider client={client}>{children}</ConvexAuthProvider>;
+  // Password sign-in only: never treat "?code=" as an OAuth/magic-link code. Tracking links use ?code=CP-XXXX-NN,
+  // and handling it made every tracking-link visit attempt a failing sign-in that could leave auth stuck loading.
+  return <ConvexAuthProvider client={client} shouldHandleCode={false}>{children}</ConvexAuthProvider>;
 }

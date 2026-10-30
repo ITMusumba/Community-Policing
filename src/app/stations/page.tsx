@@ -53,7 +53,7 @@ export default function StationsPage() {
   const center: [number, number] = focus ? [focus.lat, focus.lng] : UGANDA_CENTER;
 
   return <main className="mx-auto min-h-screen max-w-3xl p-4 text-[#102a43] sm:p-6">
-    <a href="/" className="text-sm font-bold underline">← Home</a>
+    <a href="/" className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold shadow-sm hover:bg-slate-50">🏠 Home</a>
     <h1 className="mt-3 text-2xl font-black">Find a police station</h1>
     <p className="mt-1 text-sm text-slate-600">Type a station, district, subcounty or parish. In an emergency call 999 or 112.</p>
     <div className="mt-4 flex gap-2">

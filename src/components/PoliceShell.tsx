@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { LayoutDashboard, ListChecks, LogOut, Settings, ShieldCheck } from "lucide-react";
@@ -16,6 +16,14 @@ export default function PoliceShell({ active, children }: { active: "incidents" 
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { signOut } = useAuthActions();
   const profile = useQuery(api.profiles.me, isAuthenticated ? {} : "skip");
+  const verifying = isLoading || (isAuthenticated && profile === undefined);
+  // Offer a way out if verification hangs (poor connection, stale session) instead of an endless spinner.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!verifying) { setSlow(false); return; }
+    const t = window.setTimeout(() => setSlow(true), 10_000);
+    return () => window.clearTimeout(t);
+  }, [verifying]);
 
   // Sign out automatically after 15 minutes without activity (shared devices at stations).
   useEffect(() => {
@@ -35,7 +43,13 @@ export default function PoliceShell({ active, children }: { active: "incidents" 
     window.location.replace(`${login}?next=${encodeURIComponent(window.location.pathname)}`);
   }, [denied, active]);
 
-  if (isLoading || (isAuthenticated && profile === undefined)) return <Frame><p className="p-6 text-sm text-slate-600">Verifying credentials…</p></Frame>;
+  if (verifying) return <Frame><div className="p-6 text-sm text-slate-600"><p>Verifying credentials…</p>
+    {slow && <div className="mt-4 space-y-2"><p>This is taking longer than usual. Check your connection.</p>
+      <div className="flex gap-2">
+        <button onClick={() => window.location.reload()} className="min-h-10 rounded border border-slate-300 bg-white px-3 font-medium">Retry</button>
+        <button onClick={() => void signOut().finally(() => window.location.replace(active === "admin" ? "/admin/login" : "/police/login"))} className="min-h-10 rounded border border-slate-300 bg-white px-3 font-medium">Sign in again</button>
+      </div></div>}
+  </div></Frame>;
   if (!isAuthenticated || !profile || !STAFF.includes(profile.role) || !profile.isActive) return <Frame><p className="p-6 text-sm text-slate-600">Redirecting to sign in…</p></Frame>;
   if (profile.mustChangePassword) return <Frame><div className="mx-auto max-w-md p-4"><ChangePassword required /><button onClick={() => void signOut()} className="mt-3 text-sm underline">Sign out</button></div></Frame>;
 

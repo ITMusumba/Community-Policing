@@ -41,11 +41,19 @@ export default function TrackPage() {
   if (!data) return <main className="p-6"><h1 className="text-xl font-bold">Report not found or key invalid</h1></main>;
   const report = data.report;
   return <main className="mx-auto min-h-screen max-w-xl p-4 text-[#102a43] sm:p-6">
-    <a href="/" className="text-sm font-bold underline">← Home</a>
+    <a href="/" className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold shadow-sm hover:bg-slate-50">🏠 Home</a>
     <header className="mt-4 rounded-2xl bg-[#102a43] p-5 text-white"><p className="text-sm">Tracking code</p><h1 className="mt-1 text-3xl font-black tracking-widest">{report.trackingCode}</h1><p className="mt-3 text-2xl">{statusIcon[report.status]} {report.status.replaceAll("_", " ")}</p><p className="mt-2 text-sm">{[report.parish, report.subcounty, report.district].filter(Boolean).join(" · ") || "Location pending"}</p></header>
     <section className="mt-5"><h2 className="text-lg font-black">Progress</h2><ol className="mt-3 space-y-3">{data.updates.map((update, i) => <li key={i} className="flex items-start gap-3 rounded-xl bg-white p-3"><span className="text-2xl">{statusIcon[update.toStatus] || "📝"}</span><div><p className="font-bold">{update.toStatus.replaceAll("_", " ")}</p><p className="text-xs text-slate-500">{new Date(update.createdAt).toLocaleString()}</p>{update.note && <p className="mt-1 text-sm">{update.note}</p>}</div></li>)}</ol></section>
     <section className="mt-5"><h2 className="text-lg font-black">Messages</h2>{data.notes.map((note, i) => <article key={i} className="mt-2 rounded-xl bg-white p-3"><p className="text-xs font-bold">{note.author === "officer" ? "👮 Police reply" : "🗣️ You"}</p>{note.body && <p className="mt-1">{note.body}</p>}{note.storageId && <p className="mt-1 text-xs">📎 Attachment available to authorised viewers</p>}</article>)}
-    <textarea value={body} onChange={e => setBody(e.target.value)} rows={3} placeholder="Add details or a message (optional)" className="mt-3 w-full rounded-xl border bg-white p-3" /><input type="file" accept="image/*,audio/*" capture="environment" onChange={e => setFile(e.target.files?.[0] || null)} className="mt-2 block w-full text-sm" />
+    <textarea value={body} onChange={e => setBody(e.target.value)} rows={3} placeholder="Add details or a message (optional)" className="mt-3 w-full rounded-xl border bg-white p-3" />
+    {/* Visible buttons for the hidden file inputs; the bare browser "Choose file" control was easy to miss. */}
+    <div className="mt-2 grid grid-cols-2 gap-2">
+      <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white font-semibold">📷 Add photo
+        <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={e => { setFile(e.target.files?.[0] || null); e.target.value = ""; }} /></label>
+      <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white font-semibold">🖼️ From gallery
+        <input type="file" accept="image/*,audio/*" className="sr-only" onChange={e => { setFile(e.target.files?.[0] || null); e.target.value = ""; }} /></label>
+    </div>
+    {file && <p className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2 text-sm"><span className="truncate">📎 {file.name}</span><button onClick={() => setFile(null)} className="shrink-0 font-semibold text-red-700">Remove</button></p>}
     {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}<button onClick={() => void send()} className="mt-3 min-h-14 w-full rounded-xl bg-[#176b87] font-black text-white">📤 Send update</button></section>
   </main>;
 }

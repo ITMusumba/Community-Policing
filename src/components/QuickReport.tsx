@@ -118,7 +118,6 @@ export default function QuickReport() {
       const created = await sendPending(pending);
       setResult(created);
       window.history.replaceState({}, "", `/track?code=${encodeURIComponent(created.trackingCode)}`);
-      window.speechSynthesis?.speak(new SpeechSynthesisUtterance(created.trackingCode.split("").join(" ")));
     } catch (e) {
       const message = errorMessage(e, "Could not send");
       if (pending && (!navigator.onLine || /network|fetch|upload failed|connection/i.test(message))) {
@@ -166,8 +165,9 @@ export default function QuickReport() {
   if (result) return <main className="min-h-screen bg-[#102a43] p-6 text-center text-white flex flex-col items-center justify-center">
     <div className="text-7xl" aria-hidden="true">✅</div><p className="mt-6 text-xl">{t.submitted}</p>
     <p className="mt-3 text-4xl font-black tracking-widest sm:text-6xl">{result.trackingCode}</p>
-    <button className="mt-6 min-h-14 rounded-2xl bg-white px-8 text-lg font-bold text-[#102a43]" onClick={() => window.speechSynthesis?.speak(new SpeechSynthesisUtterance(result.trackingCode.split("").join(" ")))}>🔊 Read code aloud</button>
-    <a className="mt-5 underline" href={`/track?code=${result.trackingCode}`}>{t.track}</a>
+    <p className="mt-2 text-sm text-slate-300">Write this code down to follow up your report.</p>
+    <a className="mt-6 flex min-h-14 items-center justify-center rounded-2xl bg-white px-8 text-lg font-bold text-[#102a43]" href={`/track?code=${result.trackingCode}`}>📋 {t.track}</a>
+    <a className="mt-3 flex min-h-12 items-center justify-center rounded-2xl border border-white/40 px-6 font-semibold text-white" href="/">🏠 Home</a>
   </main>;
 
 

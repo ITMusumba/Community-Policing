@@ -6,7 +6,7 @@ const PORTALS = [
 
 export default function AccountPage() {
   return <main className="mx-auto min-h-screen max-w-xl p-5 text-[#102a43]">
-    <a href="/" className="text-sm font-bold underline">← Home</a>
+    <a href="/" className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold shadow-sm hover:bg-slate-50">🏠 Home</a>
     <h1 className="mb-4 mt-4 text-2xl font-black">Sign in</h1>
     <ul className="space-y-3">{PORTALS.map(p => <li key={p.href}>
       <a href={p.href} className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-[#176b87]">
