@@ -1,19 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { copy, type Language } from "@/lib/i18n";
 
 const categories = [
-  ["👜", "theft"], ["🔪", "robbery"], ["🤕", "assault"], ["🏠", "domestic_violence"],
+  ["🥷", "theft"], ["🔪", "robbery"], ["🤕", "assault"], ["🏠", "domestic_violence"],
   ["🛑", "sexual_violence"], ["🚗", "accident"], ["🔥", "fire"], ["💊", "drugs"],
-  ["👁️", "suspicious_activity"], ["🐄", "livestock_theft"], ["🏡", "land_property_dispute"], ["❔", "other"],
+  ["👁️", "suspicious_activity"], ["🐄", "livestock_theft"], ["🏡", "land_property_dispute"], ["🏠🔥", "arson"],
+  ["🗑️", "illegal_dumping"], ["💣", "terrorism"], ["❔", "other"],
 ] as const;
 type Category = typeof categories[number][1];
 type MediaItem = { storageId: string; kind: "photo" | "video" | "voice" };
 // A queued report keeps its compressed photos/video/voice as Blobs on the phone until it can be uploaded.
-type Pending = { deviceHash: string; category?: Category; description?: string; latitude?: number; longitude?: number; accuracyM?: number; fallbackStationId?: string; blobs: { blob: Blob; kind: MediaItem["kind"] }[] };
+type Pending = { deviceHash: string; category?: Category; description?: string; latitude?: number; longitude?: number; accuracyM?: number; fallbackStationId?: string; shareIdentity?: boolean; blobs: { blob: Blob; kind: MediaItem["kind"] }[] };
 
 function openQueue(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -64,6 +65,10 @@ export default function QuickReport() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ trackingCode: string; token: string } | null>(null);
   const stations = useQuery(api.reports.publicStations, {});
+  const { isAuthenticated } = useConvexAuth();
+  const me = useQuery(api.profiles.me, isAuthenticated ? {} : "skip");
+  const signedInCitizen = me?.role === "citizen" && me.isActive;
+  const [shareIdentity, setShareIdentity] = useState(false);
   const generateUploadUrl = useMutation(api.reports.generateUploadUrl);
   const createReport = useMutation(api.reports.createAnonymousReport);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -97,7 +102,7 @@ export default function QuickReport() {
       const blobs: Pending["blobs"] = [];
       for (const file of files) blobs.push({ blob: file.type.startsWith("image/") ? await compressImage(file) : file, kind: file.type.startsWith("video/") ? "video" : "photo" });
       if (voice) blobs.push({ blob: voice, kind: "voice" });
-      pending = { deviceHash: await hashDeviceId(), category: category ?? undefined, description: description.trim() || undefined, latitude: position?.latitude, longitude: position?.longitude, accuracyM: position?.accuracyM, fallbackStationId: stationId || undefined, blobs };
+      pending = { deviceHash: await hashDeviceId(), category: category ?? undefined, description: description.trim() || undefined, latitude: position?.latitude, longitude: position?.longitude, accuracyM: position?.accuracyM, shareIdentity: signedInCitizen && shareIdentity, fallbackStationId: stationId || undefined, blobs };
       if (!navigator.onLine) { await queueReport(pending); setWaiting(true); return; }
       const created = await sendPending(pending);
       setResult(created);
@@ -158,23 +163,26 @@ export default function QuickReport() {
   const CAT_LABEL: Record<Category, string> = {
     theft: "Theft", robbery: "Robbery", assault: "Assault", domestic_violence: "Home violence", sexual_violence: "Sexual assault",
     accident: "Accident", fire: "Fire", drugs: "Drugs", suspicious_activity: "Suspicious", livestock_theft: "Animal theft",
-    land_property_dispute: "Land", other: "Other",
+    land_property_dispute: "Land", arson: "Arson", illegal_dumping: "Dumping", terrorism: "Terrorism", other: "Other",
   };
   const speak = (text: string) => { try { window.speechSynthesis?.cancel(); window.speechSynthesis?.speak(new SpeechSynthesisUtterance(text)); } catch { /* no speech */ } };
   const hasDescription = Boolean(description.trim() || voice);
   const Dots = () => <div className="flex items-center gap-2" aria-label={`Step ${step} of 3`}>{[1, 2, 3].map(n => <span key={n} className={`h-2.5 w-8 rounded-full ${n <= step ? "bg-[#176b87]" : "bg-slate-300"}`} />)}</div>;
   const header = <div className="flex items-center justify-between gap-3">
-    {step > 1 ? <button onClick={() => setStep(step === 3 ? 2 : 1)} className="min-h-12 rounded-xl border px-4 text-lg font-bold" aria-label="Back">←</button> : <h1 className="text-xl font-black">{t.title}</h1>}
+    {step > 1 ? <button onClick={() => setStep(step === 3 ? 2 : 1)} className="min-h-12 rounded-xl border px-4 text-lg font-bold" aria-label="Back">←</button> : <h2 className="text-xl font-black">{t.title}</h2>}
     <Dots />
     <button className="min-h-12 rounded-xl border px-3 font-bold" onClick={() => setLanguage(language === "en" ? "lg" : "en")}>🌐 {language === "en" ? "EN" : "LG"}</button>
   </div>;
 
   return <div className="mx-auto max-w-xl px-4 py-5 pb-10">
+    {step === 1 && <>
+      <h1 className="text-center text-4xl font-black tracking-[0.2em] text-[#102a43]">COMPOL</h1>
+      <a href="tel:999" className="mt-3 mb-5 flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 text-lg font-black text-white">🚨 {t.emergency}</a>
+    </>}
     {header}
     <input ref={fileInput} className="hidden" type="file" accept="image/*,video/*" capture="environment" multiple onChange={e => { const picked = Array.from(e.target.files ?? []); setFiles(picked); if (picked.length) setStep(2); }} />
 
     {step === 1 && <>
-      <a href="tel:999" className="mt-4 flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 text-lg font-black text-white">🚨 {t.emergency}</a>
       <button onClick={() => fileInput.current?.click()} className="mt-5 flex min-h-72 w-full flex-col items-center justify-center rounded-[2rem] bg-[#176b87] text-white shadow-lg">
         <span className="text-8xl" aria-hidden="true">📷</span><span className="mt-3 text-2xl font-black">{t.report}</span><span className="mt-1 text-sm">{t.photoHint}</span>
       </button>
@@ -208,6 +216,7 @@ export default function QuickReport() {
         <p className="font-bold">{position ? `📍 ${t.gpsOk} (±${Math.round(position.accuracyM)} m)` : gpsFailed ? `📍 ${t.gpsFailed}` : `📍 ${t.gpsWaiting}`}</p>
         {gpsFailed && <label className="mt-2 block text-sm">{t.chooseStation}<select value={stationId} onChange={e => setStationId(e.target.value)} className="mt-2 min-h-12 w-full rounded-xl border bg-white p-2"><option value="">—</option>{[...new Set((stations ?? []).map(s => s.district))].sort().map(d => <optgroup key={d} label={d}>{stations?.filter(s => s.district === d).map(s => <option key={s._id} value={s._id}>{s.name}</option>)}</optgroup>)}</select></label>}
       </div>
+      {signedInCitizen && <label className="mt-3 flex items-start gap-2 rounded-xl bg-white p-3 text-sm"><input type="checkbox" checked={shareIdentity} onChange={e => setShareIdentity(e.target.checked)} className="mt-1 h-5 w-5" /><span>Share my name and phone with police<span className="block text-xs text-slate-500">Otherwise you stay anonymous. Replies still reach <a href="/citizen" className="underline">My account</a>.</span></span></label>}
       {(!category || !hasDescription) && <p className="mt-3 rounded-xl border-2 border-amber-400 bg-amber-50 p-3 font-semibold text-amber-900">⚠️ {t.unsupportedWarn}</p>}
       {waiting && <p className="mt-3 rounded-xl bg-amber-100 p-3 font-bold">🕓 {t.waiting}</p>}
       {error && <p role="alert" className="mt-3 rounded-xl bg-red-100 p-3 text-red-800">{error}</p>}
@@ -215,6 +224,6 @@ export default function QuickReport() {
     </>}
 
     <p className="mt-6 text-center text-xs text-slate-500">{t.anonNote}</p>
-    {step === 1 && <p className="mt-2 text-center text-xs text-slate-500"><a href="/stations" className="font-bold underline">Find a police station</a> · <a href="/account" className="font-bold underline">Police staff: sign in</a></p>}
+    {step === 1 && <p className="mt-2 text-center text-xs text-slate-500"><a href="/stations" className="font-bold underline">Find a police station</a> · <a href="/citizen" className="font-bold underline">My account</a> · <a href="/police/login" className="font-bold underline">Police staff</a></p>}
   </div>;
 }

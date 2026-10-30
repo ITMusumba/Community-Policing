@@ -5,10 +5,47 @@ import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
 
-function ConfiguredAuthPanel({ staffOnly }: { staffOnly: boolean }) {
+export type Audience = "citizen" | "police" | "admin";
+
+const AUDIENCE = {
+  citizen: {
+    title: "Citizen account",
+    intro: "Sign in or create an account to follow your reports and receive police replies.",
+    roles: ["citizen"],
+    home: "/citizen",
+    footer: "You stay anonymous to police unless you choose to share your name and phone on a report.",
+    wrongRole: "This is a police or administrator account. Use the staff sign-in page.",
+  },
+  police: {
+    title: "Police sign in",
+    intro: "Sign in with the account issued to you by your administrator.",
+    roles: ["officer", "admin", "super_admin"],
+    home: "/police",
+    footer: "Police accounts are created by an administrator. If you have not received one, contact your station commander.",
+    wrongRole: "This account is not authorised for police operations.",
+  },
+  admin: {
+    title: "Administrator sign in",
+    intro: "For commanders and system administrators. All access is logged.",
+    roles: ["admin", "super_admin"],
+    home: "/super-admin",
+    footer: "Administrator access is granted by a super-admin only.",
+    wrongRole: "This account does not have administrator access.",
+  },
+} as const;
+
+/** Only same-site paths are accepted as a post-sign-in destination. */
+function nextPath(fallback: string) {
+  if (typeof window === "undefined") return fallback;
+  const next = new URLSearchParams(window.location.search).get("next") ?? "";
+  return next.startsWith("/") && !next.startsWith("//") ? next : fallback;
+}
+
+function ConfiguredAuthPanel({ audience }: { audience: Audience }) {
+  const config = AUDIENCE[audience];
   const { signIn, signOut } = useAuthActions();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
-  const profile = useQuery(api.profiles.me);
+  const profile = useQuery(api.profiles.me, isAuthenticated ? {} : "skip");
   const ensureCitizenProfile = useMutation(api.profiles.ensureCitizenProfile);
   const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
   const [name, setName] = useState("");
@@ -17,34 +54,18 @@ function ConfiguredAuthPanel({ staffOnly }: { staffOnly: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [profileReady, setProfileReady] = useState(false);
+  const allowed = !!profile && profile.isActive && (config.roles as readonly string[]).includes(profile.role);
+
+  // Only the citizen page creates a profile for a brand-new sign-in. Staff profiles are created by administrators.
+  useEffect(() => {
+    if (audience !== "citizen" || !isAuthenticated || profile !== null) return;
+    ensureCitizenProfile({ displayName: mode === "signUp" ? name.trim() : undefined })
+      .catch(() => setNotice("Your sign-in is active. We could not finish setting up your profile yet; please retry shortly."));
+  }, [audience, isAuthenticated, profile, ensureCitizenProfile, mode, name]);
 
   useEffect(() => {
-    if (!isAuthenticated) setProfileReady(false);
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    if (profile && !profileReady) setProfileReady(true);
-  }, [profile, profileReady]);
-
-  useEffect(() => {
-    if (!isAuthenticated || profile !== null || profileReady) return;
-    let cancelled = false;
-    const provision = async () => {
-      try {
-        await ensureCitizenProfile({
-          displayName: mode === "signUp" ? name.trim() : undefined,
-        });
-        if (!cancelled) setProfileReady(true);
-      } catch {
-        if (!cancelled) setNotice("Your sign-in is active. We could not finish setting up your profile yet; please retry shortly.");
-      }
-    };
-    void provision();
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated, profile, profileReady, ensureCitizenProfile, mode, name]);
+    if (allowed) window.location.replace(nextPath(config.home));
+  }, [allowed, config.home]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -52,67 +73,55 @@ function ConfiguredAuthPanel({ staffOnly }: { staffOnly: boolean }) {
     setError("");
     setNotice("");
     try {
-      if (mode === "signUp" && name.trim().length < 2) {
-        throw new Error("Enter your name (at least 2 characters).");
-      }
-      if (password.length < 8) {
-        throw new Error("Use a password with at least 8 characters.");
-      }
+      if (mode === "signUp" && name.trim().length < 2) throw new Error("Enter your name (at least 2 characters).");
+      if (password.length < 8) throw new Error("Use a password with at least 8 characters.");
       await signIn("password", {
         email: email.trim().toLowerCase(),
         password,
         ...(mode === "signUp" ? { name: name.trim() } : {}),
         flow: mode,
       });
-      setNotice(mode === "signUp" ? "Account created. Finishing your citizen profile…" : "Signed in successfully.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed. Please try again.");
+      setNotice(mode === "signUp" ? "Account created. Opening your dashboard…" : "Signed in. Opening your dashboard…");
+    } catch {
+      setError(mode === "signUp" ? "Could not create the account. The email may already be registered." : "Email or password is incorrect.");
     } finally {
       setBusy(false);
     }
   };
 
-  if (authLoading) {
+  if (authLoading || (isAuthenticated && profile === undefined)) {
     return <section className="rounded-2xl border border-[var(--line)] bg-white p-6 text-sm text-[var(--muted)]">Checking your sign-in status…</section>;
   }
 
-  if (profile && profile.isActive) {
+  if (isAuthenticated && allowed) {
+    return <section className="rounded-2xl border border-[var(--line)] bg-white p-6 text-sm">Signed in as <strong>{profile.displayName}</strong>. Opening your dashboard… <a className="underline" href={nextPath(config.home)}>Continue</a></section>;
+  }
+
+  if (isAuthenticated && profile !== null) {
     return (
-      <section className="rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-[#176b87]">Signed in</p>
-            <h2 className="mt-1 text-xl font-bold">{profile.displayName}</h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">Account type: {profile.role}</p>
-          </div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold capitalize">{profile.role}</span>
-        </div>
-        <p className="mt-4 text-sm leading-6 text-[var(--muted)]">
-          Your account is connected. Incident submission and case follow-up will be enabled
-          as the remaining workflows are completed and tested.
-        </p>
-        <button
-          type="button"
-          onClick={() => void signOut()}
-          className="mt-5 min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-bold hover:bg-slate-50"
-        >
-          Sign out
-        </button>
+      <section className="rounded-2xl border border-red-200 bg-white p-5 shadow-sm sm:p-6">
+        <h2 className="text-lg font-bold">Signed in as {profile?.displayName}</h2>
+        <p className="mt-2 text-sm text-red-800">{profile?.isActive === false ? "This account has been disabled." : config.wrongRole}</p>
+        <button type="button" onClick={() => void signOut()} className="mt-4 min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-bold hover:bg-slate-50">Sign out</button>
+      </section>
+    );
+  }
+
+  if (isAuthenticated && audience !== "citizen") {
+    return (
+      <section className="rounded-2xl border border-red-200 bg-white p-5 shadow-sm sm:p-6">
+        <p className="text-sm text-red-800">{config.wrongRole}</p>
+        <button type="button" onClick={() => void signOut()} className="mt-4 min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm font-bold hover:bg-slate-50">Sign out</button>
       </section>
     );
   }
 
   return (
     <section className="rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm sm:p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold">{staffOnly ? "Staff sign in" : "Citizen account"}</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">{staffOnly ? "Sign in with the account an administrator has enabled for you." : "Sign in or create an account to get started."}</p>
-        </div>
-        <span className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Secure access</span>
-      </div>
+      <h2 className="text-xl font-bold">{config.title}</h2>
+      <p className="mt-1 text-sm text-[var(--muted)]">{config.intro}</p>
 
-      {!staffOnly && <div className="mt-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
+      {audience === "citizen" && <div className="mt-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
         <button type="button" onClick={() => { setMode("signIn"); setError(""); }} className={`min-h-10 rounded-lg text-sm font-semibold ${mode === "signIn" ? "bg-white text-[#102a43] shadow-sm" : "text-slate-600"}`}>
           Sign in
         </button>
@@ -141,20 +150,16 @@ function ConfiguredAuthPanel({ staffOnly }: { staffOnly: boolean }) {
         {notice && <p role="status" className="rounded-xl bg-cyan-50 p-3 text-sm text-cyan-900">{notice}</p>}
 
         <button type="submit" disabled={busy} className="min-h-12 w-full rounded-xl bg-[#102a43] px-4 text-sm font-bold text-white transition hover:bg-[#176b87] disabled:cursor-wait disabled:opacity-60">
-          {busy ? "Please wait…" : mode === "signUp" ? "Create citizen account" : "Sign in"}
+          {busy ? "Please wait…" : mode === "signUp" ? "Create account" : "Sign in"}
         </button>
       </form>
 
-      <p className="mt-4 text-xs leading-5 text-[var(--muted)]">
-        {staffOnly
-          ? "New staff must first register on the citizen app. An administrator then enables police access for that account."
-          : "Registration creates a citizen account only. Officer and administrator access must be granted separately by an authorized administrator."}
-      </p>
+      <p className="mt-4 text-xs leading-5 text-[var(--muted)]">{config.footer}</p>
     </section>
   );
 }
 
-export default function AuthPanel({ enabled, staffOnly = false }: { enabled: boolean; staffOnly?: boolean }) {
+export default function AuthPanel({ enabled = true, audience }: { enabled?: boolean; audience: Audience }) {
   if (!enabled) {
     return (
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6">
@@ -165,5 +170,5 @@ export default function AuthPanel({ enabled, staffOnly = false }: { enabled: boo
       </section>
     );
   }
-  return <ConfiguredAuthPanel staffOnly={staffOnly} />;
+  return <ConfiguredAuthPanel audience={audience} />;
 }

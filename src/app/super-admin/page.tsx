@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { ArrowRightLeft, ChevronDown, ChevronUp, FileText, Lock, UserX } from "lucide-react";
+import { ArrowRightLeft, ChevronDown, ChevronUp, FileText, KeyRound, Lock, UserPlus, UserX } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import PoliceShell from "@/components/PoliceShell";
@@ -33,6 +33,7 @@ function Administration({ selfId }: { selfId: Id<"userProfiles"> }) {
       <select aria-label="Show" value={filter} onChange={e => setFilter(e.target.value as "staff" | "all")} className="min-h-10 rounded border border-slate-300 bg-white px-2 text-sm"><option value="staff">Police personnel</option><option value="all">All accounts</option></select>
     </div>
     <p className="flex items-start gap-2 rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"><Lock size={15} className="mt-0.5 shrink-0" aria-hidden="true" />Passwords are never stored in readable form and cannot be viewed. When an officer leaves, hand over their open cases and disable the account; their record stays under their name.</p>
+    <AddStaff />
     {!users && <p className="text-sm text-slate-600">Loading personnel…</p>}
     <ul className="space-y-2">{shown.map(u => <li key={u._id} className="overflow-hidden rounded border border-slate-300 bg-white">
       <button onClick={() => setOpenId(openId === u._id ? null : u._id)} aria-expanded={openId === u._id} className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left">
@@ -59,6 +60,8 @@ function UserPanel({ user, users, selfId }: { user: User; users: User[]; selfId:
   const setActive = useMutation(api.superAdmin.setUserActive);
   const setDetails = useMutation(api.superAdmin.setOfficerDetails);
   const handover = useMutation(api.superAdmin.handoverCases);
+  const resetPassword = useAction(api.staffAccounts.resetStaffPassword);
+  const [issued, setIssued] = useState<{ email: string; password: string } | null>(null);
   const [stationId, setStationId] = useState<string>(user.stationId ?? "");
   const [badge, setBadge] = useState(user.badgeNumber ?? "");
   const [toId, setToId] = useState("");
@@ -86,6 +89,10 @@ function UserPanel({ user, users, selfId }: { user: User; users: User[]; selfId:
         <button disabled={locked} onClick={() => void act(() => setActive({ userId: user._id, isActive: !user.isActive }), user.isActive ? "Account disabled." : "Account re-enabled.")} className={`${btn} w-full ${user.isActive ? "border-red-300 text-red-800" : "border-slate-800 bg-slate-800 text-white"}`}>
           <UserX size={15} aria-hidden="true" />{user.isActive ? "Disable account" : "Re-enable account"}</button>
       </div>
+      {user.role !== "citizen" && !locked && <div className="sm:col-span-2">
+        <button onClick={() => void act(async () => { const r = await resetPassword({ profileId: user._id }); setIssued(r); }, "New one-time password issued. The officer has been signed out everywhere.")} className={`${btn} border-slate-300 bg-white`}><KeyRound size={15} aria-hidden="true" />Reset password</button>
+        {issued && <OneTimePassword email={issued.email} password={issued.password} onClose={() => setIssued(null)} />}
+      </div>}
       {(user.role === "officer" || user.role === "admin") && <>
         <label className="block"><span className="text-xs uppercase tracking-wide text-slate-600">Station</span>
           <select value={stationId} onChange={e => setStationId(e.target.value)} className="mt-1 min-h-10 w-full rounded border border-slate-300 bg-white px-2"><option value="">No station</option>{stations?.map(s => <option key={s._id} value={s._id}>{s.name} · {s.district}</option>)}</select></label>
@@ -144,4 +151,58 @@ function CaseTable({ cases, empty }: { cases: Case[]; empty: string }) {
       <td className="px-2 py-1.5">{CATEGORY_LABEL[c.category] ?? c.category}</td><td className="px-2 py-1.5">{STATUS_LABEL[c.status as keyof typeof STATUS_LABEL] ?? c.status}</td>
       <td className="hidden px-2 py-1.5 sm:table-cell">{c.place || "—"}</td><td className="px-2 py-1.5 whitespace-nowrap">{fmt(c.createdAt)}</td></tr>)}</tbody>
   </table></div>;
+}
+
+function OneTimePassword({ email, password, onClose }: { email: string; password: string; onClose: () => void }) {
+  return <div role="status" className="mt-2 rounded border-2 border-amber-400 bg-amber-50 p-3 text-sm">
+    <p className="font-semibold">One-time sign-in details — shown only once</p>
+    <p className="mt-1">Email: <span className="font-mono">{email}</span></p>
+    <p>Password: <span className="font-mono text-base tracking-wider">{password}</span></p>
+    <p className="mt-1 text-xs text-slate-700">Give these to the officer in person, not by public message. They sign in at <span className="font-mono">/police/login</span> and must set their own password straight away.</p>
+    <div className="mt-2 flex gap-2">
+      <button onClick={() => void navigator.clipboard?.writeText(`Email: ${email}
+One-time password: ${password}
+Sign in: ${window.location.origin}/police/login`)} className={`${btn} border-slate-300 bg-white`}>Copy</button>
+      <button onClick={onClose} className={`${btn} border-slate-300 bg-white`}>Done</button>
+    </div>
+  </div>;
+}
+
+/** Police and admin accounts are created here only; the public sign-up page makes citizen accounts. */
+function AddStaff() {
+  const create = useAction(api.staffAccounts.createStaffAccount);
+  const stations = useQuery(api.reports.publicStations, {});
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ displayName: "", email: "", role: "officer" as "officer" | "admin", badgeNumber: "", stationId: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [issued, setIssued] = useState<{ email: string; password: string } | null>(null);
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setError("");
+    try {
+      const r = await create({ displayName: form.displayName, email: form.email, role: form.role, badgeNumber: form.badgeNumber || undefined, stationId: (form.stationId || undefined) as Id<"stations"> | undefined });
+      setIssued(r);
+      setForm({ displayName: "", email: "", role: "officer", badgeNumber: "", stationId: "" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message.replace(/^.*Uncaught ConvexError: /, "").split("\n")[0] : "Could not create the account.");
+    } finally { setBusy(false); }
+  }
+
+  const field = "min-h-10 rounded border border-slate-300 bg-white px-2 text-sm";
+  return <section className="rounded border border-slate-300 bg-white">
+    <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-left font-semibold"><UserPlus size={16} aria-hidden="true" />Add police officer or administrator</button>
+    {issued && <div className="px-3 pb-3"><OneTimePassword email={issued.email} password={issued.password} onClose={() => setIssued(null)} /></div>}
+    {open && <form onSubmit={submit} className="grid gap-2 border-t border-slate-200 p-3 sm:grid-cols-2">
+      <input required minLength={2} placeholder="Full name" aria-label="Full name" value={form.displayName} onChange={set("displayName")} className={field} />
+      <input required type="email" placeholder="Email (used to sign in)" aria-label="Email" value={form.email} onChange={set("email")} className={field} />
+      <select aria-label="Role" value={form.role} onChange={set("role")} className={field}><option value="officer">Officer</option><option value="admin">Commander / Admin</option></select>
+      <input placeholder="Badge / force number" aria-label="Badge number" value={form.badgeNumber} onChange={set("badgeNumber")} className={field} />
+      <select aria-label="Station" value={form.stationId} onChange={set("stationId")} className={`${field} sm:col-span-2`}><option value="">Station (optional)</option>{stations?.map(st => <option key={st._id} value={st._id}>{st.name} · {st.district}</option>)}</select>
+      {error && <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800 sm:col-span-2">{error}</p>}
+      <button disabled={busy} className={`${btn} border-slate-800 bg-slate-800 text-white sm:col-span-2`}>{busy ? "Creating…" : "Create account and one-time password"}</button>
+    </form>}
+  </section>;
 }

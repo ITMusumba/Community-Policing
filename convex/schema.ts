@@ -7,7 +7,7 @@ const crimeCategory = v.union(
   v.literal("domestic_violence"), v.literal("sexual_violence"),
   v.literal("accident"), v.literal("fire"), v.literal("drugs"),
   v.literal("suspicious_activity"), v.literal("livestock_theft"),
-  v.literal("land_property_dispute"), v.literal("other")
+  v.literal("land_property_dispute"), v.literal("arson"), v.literal("illegal_dumping"), v.literal("terrorism"), v.literal("other")
 );
 const reportStatus = v.union(
   v.literal("received"), v.literal("seen"), v.literal("assigned"),
@@ -28,6 +28,9 @@ export default defineSchema({
     station: v.optional(v.string()),
     stationId: v.optional(v.id("stations")),
     district: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    // Set on admin-created staff accounts and password resets; cleared when the officer sets their own password.
+    mustChangePassword: v.optional(v.boolean()),
     isActive: v.boolean(),
     createdAt: v.number(),
   })
@@ -67,6 +70,10 @@ export default defineSchema({
     closeReason: v.optional(v.string()),
     // Set when the citizen sent no incident type and/or no voice/text description.
     supportNote: v.optional(v.string()),
+    // Signed-in citizen chose to show their name and phone to police. Otherwise reporterId is never sent to officers.
+    shareIdentity: v.optional(v.boolean()),
+    // Last time the signed-in reporter opened this report (drives the unread badge).
+    citizenSeenAt: v.optional(v.number()),
   })
     .index("by_tracking_code", ["trackingCode"])
     .index("by_reference_number", ["referenceNumber"])

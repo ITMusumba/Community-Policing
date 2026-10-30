@@ -1,11 +1,18 @@
-import AuthPanel from "@/components/AuthPanel";
+const PORTALS = [
+  { href: "/citizen/login", title: "Citizen", text: "Follow your reports and read police replies. No account is needed to report a crime." },
+  { href: "/police/login", title: "Police officer", text: "Incident feed and dashboard. Accounts are issued by your administrator." },
+  { href: "/admin/login", title: "Administrator", text: "Personnel, police accounts and stations." },
+];
 
 export default function AccountPage() {
   return <main className="mx-auto min-h-screen max-w-xl bg-slate-50 p-5 text-[#102a43]">
     <a href="/" className="text-sm font-bold underline">← Home</a>
-    <h1 className="mb-4 mt-4 text-2xl font-black">Sign in or create an account</h1>
-    <p className="mb-4 text-sm text-slate-600">You do not need an account to report a crime. Accounts are for police staff and administrators. Creating one makes a citizen account; an administrator must enable police access.</p>
-    <AuthPanel enabled />
-    <nav className="mt-6 flex gap-4 text-sm font-bold underline"><a href="/police">Police feed</a><a href="/super-admin">Super-admin</a></nav>
+    <h1 className="mb-4 mt-4 text-2xl font-black">Sign in</h1>
+    <ul className="space-y-3">{PORTALS.map(p => <li key={p.href}>
+      <a href={p.href} className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-[#176b87]">
+        <span className="text-lg font-bold">{p.title} →</span>
+        <span className="mt-1 block text-sm text-slate-600">{p.text}</span>
+      </a>
+    </li>)}</ul>
   </main>;
 }

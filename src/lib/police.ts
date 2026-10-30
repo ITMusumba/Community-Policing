@@ -14,7 +14,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   theft: "Theft", robbery: "Robbery", assault: "Assault", domestic_violence: "Domestic violence",
   sexual_violence: "Sexual offence", accident: "Road traffic accident", fire: "Fire", drugs: "Narcotics",
   suspicious_activity: "Suspicious activity", livestock_theft: "Livestock theft",
-  land_property_dispute: "Land / property dispute", other: "Other",
+  land_property_dispute: "Land / property dispute", arson: "Arson", illegal_dumping: "Illegal dumping", terrorism: "Terrorism / explosive threat", other: "Other",
 };
 
 export const STATUS_LABEL = {

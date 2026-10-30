@@ -6,7 +6,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { LayoutDashboard, ListChecks, LogOut, Settings, ShieldCheck } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
-import AuthPanel from "@/components/AuthPanel";
+import ChangePassword from "@/components/ChangePassword";
 
 const IDLE_LIMIT_MS = 15 * 60 * 1000;
 const STAFF = ["officer", "admin", "super_admin"];
@@ -27,9 +27,17 @@ export default function PoliceShell({ active, children }: { active: "incidents" 
     return () => { window.clearTimeout(timer); events.forEach(e => window.removeEventListener(e, reset)); };
   }, [isAuthenticated, signOut]);
 
+  // Signed out or wrong role: go to the matching sign-in page, which explains why and offers sign out.
+  const denied = !isLoading && (!isAuthenticated || profile === null || (!!profile && (!STAFF.includes(profile.role) || !profile.isActive)));
+  useEffect(() => {
+    if (!denied) return;
+    const login = active === "admin" ? "/admin/login" : "/police/login";
+    window.location.replace(`${login}?next=${encodeURIComponent(window.location.pathname)}`);
+  }, [denied, active]);
+
   if (isLoading || (isAuthenticated && profile === undefined)) return <Frame><p className="p-6 text-sm text-slate-600">Verifying credentials…</p></Frame>;
-  if (!isAuthenticated || !profile) return <Frame><div className="mx-auto max-w-md p-4"><h1 className="mb-1 text-lg font-semibold text-slate-900">Authorised personnel only</h1><p className="mb-4 text-sm text-slate-600">Sign in with your issued police account. All access is logged.</p><AuthPanel enabled={true} staffOnly /></div></Frame>;
-  if (!STAFF.includes(profile.role) || !profile.isActive) return <Frame><p className="p-6 text-sm text-slate-700">This account is not authorised for police operations.</p></Frame>;
+  if (!isAuthenticated || !profile || !STAFF.includes(profile.role) || !profile.isActive) return <Frame><p className="p-6 text-sm text-slate-600">Redirecting to sign in…</p></Frame>;
+  if (profile.mustChangePassword) return <Frame><div className="mx-auto max-w-md p-4"><ChangePassword required /><button onClick={() => void signOut()} className="mt-3 text-sm underline">Sign out</button></div></Frame>;
 
   const isAdmin = profile.role === "admin" || profile.role === "super_admin";
   const tab = (href: string, label: string, Icon: typeof ListChecks, on: boolean) =>

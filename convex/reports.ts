@@ -1,12 +1,14 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireOfficer } from "./lib/auth";
 import { distanceKm, locatePoint } from "./lib/geo";
 
 const category = v.union(
   v.literal("theft"), v.literal("robbery"), v.literal("assault"), v.literal("domestic_violence"),
   v.literal("sexual_violence"), v.literal("accident"), v.literal("fire"), v.literal("drugs"),
-  v.literal("suspicious_activity"), v.literal("livestock_theft"), v.literal("land_property_dispute"), v.literal("other")
+  v.literal("suspicious_activity"), v.literal("livestock_theft"), v.literal("land_property_dispute"),
+  v.literal("arson"), v.literal("illegal_dumping"), v.literal("terrorism"), v.literal("other")
 );
 const status = v.union(
   v.literal("received"), v.literal("seen"), v.literal("assigned"), v.literal("en_route"),
@@ -14,7 +16,7 @@ const status = v.union(
 );
 const media = v.array(v.object({ storageId: v.id("_storage"), kind: v.union(v.literal("photo"), v.literal("video"), v.literal("voice")) }));
 
-function tokenHash(token: string) {
+export function tokenHash(token: string) {
   return crypto.subtle.digest("SHA-256", new TextEncoder().encode(token))
     .then(buffer => Array.from(new Uint8Array(buffer), b => b.toString(16).padStart(2, "0")).join(""));
 }
@@ -63,7 +65,7 @@ type Priority = "p1" | "p2" | "p3" | "p4";
 // Initial triage by category; officers can re-prioritise. Targets are minutes to first response.
 export const PRIORITY_TARGET_MIN: Record<Priority, number> = { p1: 30, p2: 120, p3: 1440, p4: 4320 };
 function defaultPriority(category: string): Priority {
-  if (["robbery", "assault", "sexual_violence", "fire", "accident"].includes(category)) return "p1";
+  if (["robbery", "assault", "sexual_violence", "fire", "arson", "accident", "terrorism"].includes(category)) return "p1";
   if (["domestic_violence", "theft", "livestock_theft", "drugs"].includes(category)) return "p2";
   if (category === "suspicious_activity") return "p3";
   return "p4";
@@ -104,8 +106,13 @@ export const createAnonymousReport = mutation({
     deviceHash: v.string(), category: v.optional(category), description: v.optional(v.string()),
     latitude: v.optional(v.number()), longitude: v.optional(v.number()),
     accuracyM: v.optional(v.number()), fallbackStationId: v.optional(v.id("stations")), media,
+    shareIdentity: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    // A signed-in citizen's report is linked to their account so replies reach their dashboard.
+    const userId = await getAuthUserId(ctx);
+    const citizen = userId ? await ctx.db.query("userProfiles").withIndex("by_user_id", q => q.eq("userId", userId)).unique() : null;
+    const reporterId = citizen?.isActive && citizen.role === "citizen" ? citizen._id : undefined;
     if (args.deviceHash.length < 32 || args.deviceHash.length > 128) throw new ConvexError("Invalid anonymous device key.");
     if ((args.latitude === undefined) !== (args.longitude === undefined)) throw new ConvexError("Both coordinates are required.");
     if (args.latitude !== undefined && (args.latitude < -90 || args.latitude > 90 || args.longitude! < -180 || args.longitude! > 180)) throw new ConvexError("Invalid coordinates.");
@@ -131,6 +138,7 @@ export const createAnonymousReport = mutation({
       deviceHash: args.deviceHash, latitude: args.latitude, longitude: args.longitude, accuracyM: args.accuracyM,
       stationId: station?._id, district: area?.district ?? station?.district, subcounty: area?.subcounty ?? station?.subcounty, parish: area?.parish ?? station?.parish,
       verified: false, createdAt: now, updatedAt: now,
+      reporterId, shareIdentity: reporterId ? args.shareIdentity === true : undefined,
       priority: defaultPriority(category),
       referenceNumber: await nextReferenceNumber(ctx, station?.district, now),
     });
@@ -195,9 +203,12 @@ export const officerFeed = query({
       (!args.subcounty || r.subcounty === args.subcounty) && (!args.parish || r.parish === args.parish) &&
       (!args.category || r.category === args.category) && (!args.status || r.status === args.status)
     ).slice(0, 100);
-    // Never send the device key or the follow-up token hash to officers.
+    // Never send the device key, the follow-up token hash or the reporter's account to officers.
+    // Name and phone are included only when the signed-in reporter opted in.
     return await Promise.all(rows.map(async row => {
-      const { deviceHash: _deviceHash, followUpTokenHash: _tokenHash, ...safe } = row;
+      const { deviceHash: _deviceHash, followUpTokenHash: _tokenHash, reporterId, citizenSeenAt: _seen, ...safe } = row;
+      const sharer = row.shareIdentity && reporterId ? await ctx.db.get(reporterId) : null;
+      const reporter = sharer ? { name: sharer.displayName, phone: sharer.phone ?? null } : null;
       const mediaItems = await ctx.db.query("reportMedia").withIndex("by_report_created", q => q.eq("reportId", row._id)).collect();
       const noteItems = await ctx.db.query("reportNotes").withIndex("by_report_created", q => q.eq("reportId", row._id)).order("asc").collect();
       // Occurrence log: every status change with the acting officer's name and badge.
@@ -209,6 +220,7 @@ export const officerFeed = query({
       const assigned = row.assignedOfficerId ? await ctx.db.get(row.assignedOfficerId) : null;
       return {
         ...safe,
+        reporter,
         log,
         assignedOfficer: assigned ? `${assigned.displayName}${assigned.badgeNumber ? ` (${assigned.badgeNumber})` : ""}` : null,
         media: await Promise.all(mediaItems.map(async m => ({ _id: m._id, kind: m.kind, url: await ctx.storage.getUrl(m.storageId) }))),

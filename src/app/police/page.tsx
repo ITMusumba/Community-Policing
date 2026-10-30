@@ -10,7 +10,7 @@ import PoliceShell from "@/components/PoliceShell";
 import IncidentMap from "@/components/IncidentMap";
 import { CATEGORY_LABEL, PRIORITY, STATUS_LABEL, elapsed, responseState, type Priority } from "@/lib/police";
 
-const cats = ["theft","robbery","assault","domestic_violence","sexual_violence","accident","fire","drugs","suspicious_activity","livestock_theft","land_property_dispute","other"] as const;
+const cats = ["theft","robbery","assault","domestic_violence","sexual_violence","accident","fire","drugs","suspicious_activity","livestock_theft","land_property_dispute","arson","illegal_dumping","terrorism","other"] as const;
 const statuses = ["received","seen","assigned","en_route","closed","duplicate","false"] as const;
 type Outcome = "close" | "duplicate" | "false";
 const OUTCOMES: Record<Outcome, { title: string; reasons: string[] }> = {
@@ -113,6 +113,7 @@ function IncidentCard({ report: r, now }: { report: FeedRow; now: number }) {
       <p className="mt-2 flex items-start gap-1.5 text-sm"><MapPin size={15} className="mt-0.5 shrink-0 text-slate-500" aria-hidden="true" /><span>{[r.parish, r.subcounty, r.district].filter(Boolean).join(", ") || "Location not determined"}<span className="text-slate-500"> · GPS {r.accuracyM ? `±${Math.round(r.accuracyM)} m` : "not provided"}</span>
         {r.latitude !== undefined && r.longitude !== undefined && <> · <a className="inline-flex items-center gap-0.5 text-blue-800 underline" href={`https://maps.google.com/?q=${r.latitude},${r.longitude}`} target="_blank" rel="noreferrer">Open in maps<ExternalLink size={12} aria-hidden="true" /></a></>}</span></p>
       <p className="mt-1 text-sm text-slate-600">Assigned: {r.assignedOfficer ?? "Unassigned"} · Citizen ref. {r.trackingCode}</p>
+      <p className="mt-1 text-sm text-slate-600">Reporter: {r.reporter ? <>{r.reporter.name}{r.reporter.phone && <> · <a className="text-blue-800 underline" href={`tel:${r.reporter.phone}`}>{r.reporter.phone}</a></>} <span className="text-xs">(shared by reporter)</span></> : "Anonymous"}</p>
     </div>
 
     <section aria-label="Evidence" className="bg-slate-900">
