@@ -7,6 +7,8 @@ import { ArrowRightLeft, ChevronDown, ChevronUp, FileText, KeyRound, Lock, UserP
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import PoliceShell from "@/components/PoliceShell";
+import StationOptions from "@/components/StationOptions";
+import { errorMessage } from "@/lib/errors";
 import { CATEGORY_LABEL, PRIORITY, STATUS_LABEL, type Priority } from "@/lib/police";
 
 type User = FunctionReturnType<typeof api.superAdmin.listUsers>[number];
@@ -49,7 +51,45 @@ function Administration({ selfId }: { selfId: Id<"userProfiles"> }) {
       </button>
       {openId === u._id && <UserPanel user={u} users={users ?? []} selfId={selfId} />}
     </li>)}</ul>
+    <StationReview />
   </main>;
+}
+
+/** Stations imported from OpenStreetMap show as "unconfirmed" until checked and verified here. */
+function StationReview() {
+  const stations = useQuery(api.superAdmin.listStationsForReview, {});
+  const setVerified = useMutation(api.superAdmin.setStationsVerified);
+  const remove = useMutation(api.superAdmin.deleteStation);
+  const [search, setSearch] = useState("");
+  const [showVerified, setShowVerified] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const q = search.trim().toLowerCase();
+  const shown = (stations ?? []).filter(s => s.verified === showVerified && `${s.name} ${s.district}`.toLowerCase().includes(q)).slice(0, 100);
+  const pending = (stations ?? []).filter(s => !s.verified).length;
+
+  async function act(fn: () => Promise<unknown>, ok: string) {
+    setMsg(null);
+    try { await fn(); setMsg({ ok: true, text: ok }); } catch (e) { setMsg({ ok: false, text: errorMessage(e, "Action failed.") }); }
+  }
+
+  return <section className="space-y-2 pt-4">
+    <div><h2 className="text-lg font-semibold">Police stations</h2><p className="text-sm text-slate-600">{pending} unconfirmed. Unconfirmed stations already appear on the map, faded and marked &quot;unconfirmed&quot;. Check the name and location, then verify.</p></div>
+    <div className="flex flex-wrap gap-2">
+      <input aria-label="Search stations" placeholder="Search name or district" value={search} onChange={e => setSearch(e.target.value)} className="min-h-10 min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 text-sm" />
+      <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" checked={showVerified} onChange={e => setShowVerified(e.target.checked)} />Show verified</label>
+      <button disabled={!shown.length} onClick={() => void act(() => setVerified({ stationIds: shown.map(s => s._id), verified: !showVerified }), `${shown.length} stations ${showVerified ? "unverified" : "verified"}.`)} className={`${btn} border-slate-800 bg-slate-800 text-white`}>{showVerified ? "Unverify" : "Verify"} these {shown.length}</button>
+    </div>
+    {msg && <p role="status" className={`rounded px-3 py-2 text-sm ${msg.ok ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-800"}`}>{msg.text}</p>}
+    {!stations && <p className="text-sm text-slate-600">Loading stations…</p>}
+    <ul className="space-y-1.5">{shown.map(s => <li key={s._id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-300 bg-white px-3 py-2">
+      <div className="min-w-0"><p className="truncate text-sm font-medium">{s.name}</p><p className="text-xs text-slate-600">{s.type.replaceAll("_", " ")} · {s.district} · {s.subcounty} · <a className="underline" href={`https://www.openstreetmap.org/?mlat=${s.lat}&mlon=${s.lng}#map=17/${s.lat}/${s.lng}`} target="_blank" rel="noreferrer">view on map</a></p></div>
+      <div className="flex gap-2">
+        <button onClick={() => void act(() => setVerified({ stationIds: [s._id], verified: !s.verified }), s.verified ? "Station unverified." : "Station verified.")} className={`${btn} border-slate-300 bg-white`}>{s.verified ? "Unverify" : "Verify"}</button>
+        <button onClick={() => { if (confirm(`Delete ${s.name}?`)) void act(() => remove({ stationId: s._id }), "Station deleted."); }} className={`${btn} border-red-300 bg-white text-red-800`}>Delete</button>
+      </div>
+    </li>)}</ul>
+    {stations && !shown.length && <p className="text-sm text-slate-600">No {showVerified ? "verified" : "unverified"} stations match.</p>}
+  </section>;
 }
 
 function UserPanel({ user, users, selfId }: { user: User; users: User[]; selfId: Id<"userProfiles"> }) {
@@ -75,7 +115,7 @@ function UserPanel({ user, users, selfId }: { user: User; users: User[]; selfId:
 
   async function act(fn: () => Promise<unknown>, ok: string) {
     setMsg(null);
-    try { await fn(); setMsg({ ok: true, text: ok }); } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : "Action failed." }); }
+    try { await fn(); setMsg({ ok: true, text: ok }); } catch (e) { setMsg({ ok: false, text: errorMessage(e, "Action failed.") }); }
   }
 
   return <div className="space-y-4 border-t border-slate-200 bg-slate-50 px-3 py-3 text-sm">
@@ -95,7 +135,7 @@ function UserPanel({ user, users, selfId }: { user: User; users: User[]; selfId:
       </div>}
       {(user.role === "officer" || user.role === "admin") && <>
         <label className="block"><span className="text-xs uppercase tracking-wide text-slate-600">Station</span>
-          <select value={stationId} onChange={e => setStationId(e.target.value)} className="mt-1 min-h-10 w-full rounded border border-slate-300 bg-white px-2"><option value="">No station</option>{stations?.map(s => <option key={s._id} value={s._id}>{s.name} · {s.district}</option>)}</select></label>
+          <select value={stationId} onChange={e => setStationId(e.target.value)} className="mt-1 min-h-10 w-full rounded border border-slate-300 bg-white px-2"><option value="">No station</option><StationOptions stations={stations} /></select></label>
         <label className="block"><span className="text-xs uppercase tracking-wide text-slate-600">Badge number</span>
           <div className="mt-1 flex gap-2"><input value={badge} onChange={e => setBadge(e.target.value)} className="min-h-10 min-w-0 flex-1 rounded border border-slate-300 bg-white px-2" />
             <button onClick={() => void act(() => setDetails({ userId: user._id, stationId: (stationId || undefined) as Id<"stations"> | undefined, badgeNumber: badge || undefined }), "Station and badge saved.")} className={`${btn} border-slate-800 bg-slate-800 text-white`}>Save</button></div></label>
@@ -187,7 +227,7 @@ function AddStaff() {
       setIssued(r);
       setForm({ displayName: "", email: "", role: "officer", badgeNumber: "", stationId: "" });
     } catch (err) {
-      setError(err instanceof Error ? err.message.replace(/^.*Uncaught ConvexError: /, "").split("\n")[0] : "Could not create the account.");
+      setError(errorMessage(err, "Could not create the account."));
     } finally { setBusy(false); }
   }
 
@@ -200,7 +240,7 @@ function AddStaff() {
       <input required type="email" placeholder="Email (used to sign in)" aria-label="Email" value={form.email} onChange={set("email")} className={field} />
       <select aria-label="Role" value={form.role} onChange={set("role")} className={field}><option value="officer">Officer</option><option value="admin">Commander / Admin</option></select>
       <input placeholder="Badge / force number" aria-label="Badge number" value={form.badgeNumber} onChange={set("badgeNumber")} className={field} />
-      <select aria-label="Station" value={form.stationId} onChange={set("stationId")} className={`${field} sm:col-span-2`}><option value="">Station (optional)</option>{stations?.map(st => <option key={st._id} value={st._id}>{st.name} · {st.district}</option>)}</select>
+      <select aria-label="Station" value={form.stationId} onChange={set("stationId")} className={`${field} sm:col-span-2`}><option value="">Station (optional)</option><StationOptions stations={stations} /></select>
       {error && <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800 sm:col-span-2">{error}</p>}
       <button disabled={busy} className={`${btn} border-slate-800 bg-slate-800 text-white sm:col-span-2`}>{busy ? "Creating…" : "Create account and one-time password"}</button>
     </form>}

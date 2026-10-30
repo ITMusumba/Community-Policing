@@ -6,6 +6,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import ChangePassword from "@/components/ChangePassword";
+import { errorMessage } from "@/lib/errors";
 import { CATEGORY_LABEL, STATUS_LABEL } from "@/lib/police";
 
 type Report = FunctionReturnType<typeof api.citizen.myReports>[number];
@@ -53,9 +54,9 @@ export default function CitizenPage() {
   </main>;
 
   const unread = (reports ?? []).reduce((n, r) => n + r.unread, 0);
-  return <main className="mx-auto min-h-screen max-w-xl bg-slate-50 p-4 text-[#102a43] sm:p-6">
+  return <main className="mx-auto min-h-screen max-w-xl p-4 text-[#102a43] sm:p-6">
     <div className="flex items-center justify-between gap-2">
-      <a href="/" className="text-sm font-bold underline">← Report an incident</a>
+      <a href="/" className="flex min-h-11 items-center gap-2 rounded-xl bg-red-700 px-4 font-bold text-white shadow-sm hover:bg-red-800">📷 Report an incident</a>
       <button onClick={() => void signOut().then(() => window.location.replace("/"))} className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold">Sign out</button>
     </div>
     <h1 className="mt-4 text-2xl font-black">Hello, {profile.displayName}</h1>
@@ -89,7 +90,7 @@ function ReportCard({ report: r, open, onToggle }: { report: Report; open: boole
   async function send() {
     setError("");
     try { await addNote({ reportId: r._id, body }); setBody(""); }
-    catch (e) { setError(e instanceof Error ? e.message.replace(/^.*Uncaught ConvexError: /, "").split("\n")[0] : "Message not sent."); }
+    catch (e) { setError(errorMessage(e, "Message not sent.")); }
   }
 
   return <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -126,7 +127,7 @@ function MyDetails({ name, phone }: { name: string; phone: string }) {
   const [displayName, setDisplayName] = useState(name);
   const [tel, setTel] = useState(phone);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  return <form onSubmit={async e => { e.preventDefault(); setMsg(null); try { await update({ displayName, phone: tel || undefined }); setMsg({ ok: true, text: "Details saved." }); } catch (err) { setMsg({ ok: false, text: err instanceof Error ? err.message.replace(/^.*Uncaught ConvexError: /, "").split("\n")[0] : "Could not save." }); } }}
+  return <form onSubmit={async e => { e.preventDefault(); setMsg(null); try { await update({ displayName, phone: tel || undefined }); setMsg({ ok: true, text: "Details saved." }); } catch (err) { setMsg({ ok: false, text: errorMessage(err, "Could not save.") }); } }}
     className="space-y-3 rounded border border-slate-300 bg-white p-4 text-sm">
     <h2 className="text-lg font-semibold">My details</h2>
     <p className="text-slate-600">Police only see these when you tick &quot;Share my name and phone&quot; on a report.</p>

@@ -127,7 +127,9 @@ export default defineSchema({
     lng: v.optional(v.number()),
   })
     .index("by_level_district", ["level", "district"])
-    .index("by_level_district_subcounty", ["level", "district", "subcounty"]),
+    .index("by_level_district_subcounty", ["level", "district", "subcounty"])
+    .searchIndex("search_parish", { searchField: "parish", filterFields: ["level"] })
+    .searchIndex("search_subcounty", { searchField: "subcounty", filterFields: ["level"] }),
 
   // Simplified parish polygons, one or more documents per district (documents are capped at 1 MiB).
   adminGeo: defineTable({

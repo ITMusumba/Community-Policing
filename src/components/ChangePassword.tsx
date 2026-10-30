@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useAction } from "convex/react";
+import { errorMessage } from "@/lib/errors";
 import { api } from "@/convex/_generated/api";
 
 export default function ChangePassword({ required = false, onDone }: { required?: boolean; onDone?: () => void }) {
@@ -23,7 +24,7 @@ export default function ChangePassword({ required = false, onDone }: { required?
       setMsg({ ok: true, text: "Password changed." });
       onDone?.();
     } catch (err) {
-      setMsg({ ok: false, text: err instanceof Error ? err.message.replace(/^.*Uncaught ConvexError: /, "").split("\n")[0] : "Could not change password." });
+      setMsg({ ok: false, text: errorMessage(err, "Could not change password.") });
     } finally { setBusy(false); }
   }
 

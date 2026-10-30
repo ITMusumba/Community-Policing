@@ -17,7 +17,7 @@ const AUDIENCE = {
     wrongRole: "This is a police or administrator account. Use the staff sign-in page.",
   },
   police: {
-    title: "Police sign in",
+    title: "Officer Sign In",
     intro: "Sign in with the account issued to you by your administrator.",
     roles: ["officer", "admin", "super_admin"],
     home: "/police",
@@ -25,7 +25,7 @@ const AUDIENCE = {
     wrongRole: "This account is not authorised for police operations.",
   },
   admin: {
-    title: "Administrator sign in",
+    title: "Admin Sign In",
     intro: "For commanders and system administrators. All access is logged.",
     roles: ["admin", "super_admin"],
     home: "/super-admin",

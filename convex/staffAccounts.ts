@@ -82,7 +82,7 @@ export const createStaffAccount = action({
     const badgeNumber = args.badgeNumber?.trim() || undefined;
     if (displayName.length < 2 || displayName.length > 120) throw new ConvexError("Name must be between 2 and 120 characters.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ConvexError("Enter a valid email address.");
-    if (badgeNumber && !/^[A-Za-z0-9/-]{2,40}$/.test(badgeNumber)) throw new ConvexError("Badge number format is invalid.");
+    if (badgeNumber && !/^[A-Za-z0-9][A-Za-z0-9/_. -]{1,39}$/.test(badgeNumber)) throw new ConvexError("Badge number: 2–40 letters, digits, and - _ / . or spaces.");
     const problem = await ctx.runQuery(internal.staffAccounts.checkNewStaff, { email, badgeNumber });
     if (problem) throw new ConvexError(problem);
 

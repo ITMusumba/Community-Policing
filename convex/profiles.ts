@@ -90,7 +90,7 @@ export const provisionOfficer = mutation({
     if (displayName.length < 2 || displayName.length > 120) {
       throw new ConvexError("Officer name must be between 2 and 120 characters.");
     }
-    if (!/^[A-Za-z0-9-]{2,40}$/.test(badgeNumber)) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9/_. -]{1,39}$/.test(badgeNumber)) {
       throw new ConvexError("Badge number format is invalid.");
     }
 

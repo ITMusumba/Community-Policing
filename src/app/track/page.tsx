@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { errorMessage } from "@/lib/errors";
 import { api } from "@/convex/_generated/api";
 
 const statusIcon: Record<string, string> = { received: "📥", seen: "👁️", assigned: "👮", en_route: "🚓", closed: "✅", duplicate: "🧩", false: "⚠️" };
@@ -31,7 +32,7 @@ export default function TrackPage() {
       }
       await addNote({ code, token, body: body.trim() || undefined, storageId: storageId as never, kind });
       setBody(""); setFile(null);
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not send update."); }
+    } catch (e) { setError(errorMessage(e, "Could not send update.")); }
   }
 
   if (!code) return <main className="mx-auto max-w-lg p-6"><h1 className="text-2xl font-black">Track a report</h1><p className="mt-3">Open the link from your receipt or add ?code=YOUR-CODE to this page.</p></main>;
@@ -39,7 +40,7 @@ export default function TrackPage() {
   if (data === undefined) return <main className="p-6">Loading report…</main>;
   if (!data) return <main className="p-6"><h1 className="text-xl font-bold">Report not found or key invalid</h1></main>;
   const report = data.report;
-  return <main className="mx-auto min-h-screen max-w-xl bg-slate-50 p-4 text-[#102a43] sm:p-6">
+  return <main className="mx-auto min-h-screen max-w-xl p-4 text-[#102a43] sm:p-6">
     <a href="/" className="text-sm font-bold underline">← Home</a>
     <header className="mt-4 rounded-2xl bg-[#102a43] p-5 text-white"><p className="text-sm">Tracking code</p><h1 className="mt-1 text-3xl font-black tracking-widest">{report.trackingCode}</h1><p className="mt-3 text-2xl">{statusIcon[report.status]} {report.status.replaceAll("_", " ")}</p><p className="mt-2 text-sm">{[report.parish, report.subcounty, report.district].filter(Boolean).join(" · ") || "Location pending"}</p></header>
     <section className="mt-5"><h2 className="text-lg font-black">Progress</h2><ol className="mt-3 space-y-3">{data.updates.map((update, i) => <li key={i} className="flex items-start gap-3 rounded-xl bg-white p-3"><span className="text-2xl">{statusIcon[update.toStatus] || "📝"}</span><div><p className="font-bold">{update.toStatus.replaceAll("_", " ")}</p><p className="text-xs text-slate-500">{new Date(update.createdAt).toLocaleString()}</p>{update.note && <p className="mt-1 text-sm">{update.note}</p>}</div></li>)}</ol></section>

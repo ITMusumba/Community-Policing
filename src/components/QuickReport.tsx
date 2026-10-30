@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { errorMessage } from "@/lib/errors";
 import { copy, type Language } from "@/lib/i18n";
 
 const categories = [
@@ -72,6 +73,16 @@ export default function QuickReport() {
   const generateUploadUrl = useMutation(api.reports.generateUploadUrl);
   const createReport = useMutation(api.reports.createAnonymousReport);
   const fileInput = useRef<HTMLInputElement>(null);
+  const videoInput = useRef<HTMLInputElement>(null);
+  const galleryInput = useRef<HTMLInputElement>(null);
+  // Photos/videos add up across Photo, Video and Gallery picks; the input is cleared so the same file can be picked again.
+  const pickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (!picked.length) return;
+    setFiles(old => [...old, ...picked].slice(0, 8));
+    setStep(2);
+  };
   const recorder = useRef<MediaRecorder | null>(null);
   const t = copy[language];
 
@@ -109,7 +120,7 @@ export default function QuickReport() {
       window.history.replaceState({}, "", `/track?code=${encodeURIComponent(created.trackingCode)}`);
       window.speechSynthesis?.speak(new SpeechSynthesisUtterance(created.trackingCode.split("").join(" ")));
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not send";
+      const message = errorMessage(e, "Could not send");
       if (pending && (!navigator.onLine || /network|fetch|upload failed|connection/i.test(message))) {
         try { await queueReport(pending); setWaiting(true); } catch { setError(message); }
       } else setError(message);
@@ -180,12 +191,24 @@ export default function QuickReport() {
       <a href="tel:999" className="mt-3 mb-5 flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 text-lg font-black text-white">🚨 {t.emergency}</a>
     </>}
     {header}
-    <input ref={fileInput} className="hidden" type="file" accept="image/*,video/*" capture="environment" multiple onChange={e => { const picked = Array.from(e.target.files ?? []); setFiles(picked); if (picked.length) setStep(2); }} />
+    {/* Separate inputs: a combined image+video input with `capture` opens some Android cameras in video mode only. */}
+    <input ref={fileInput} className="hidden" type="file" accept="image/*" capture="environment" onChange={pickFiles} />
+    <input ref={videoInput} className="hidden" type="file" accept="video/*" capture="environment" onChange={pickFiles} />
+    <input ref={galleryInput} className="hidden" type="file" accept="image/*,video/*" multiple onChange={pickFiles} />
 
     {step === 1 && <>
-      <button onClick={() => fileInput.current?.click()} className="mt-5 flex min-h-72 w-full flex-col items-center justify-center rounded-[2rem] bg-[#176b87] text-white shadow-lg">
-        <span className="text-8xl" aria-hidden="true">📷</span><span className="mt-3 text-2xl font-black">{t.report}</span><span className="mt-1 text-sm">{t.photoHint}</span>
-      </button>
+      <div className="mt-5 rounded-[2rem] bg-[#176b87] p-4 text-white shadow-lg">
+        <p className="text-center text-2xl font-black">{t.report}</p>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <button onClick={() => fileInput.current?.click()} className="flex min-h-48 flex-col items-center justify-center rounded-3xl bg-white/15 hover:bg-white/25">
+            <span className="text-7xl" aria-hidden="true">📷</span><span className="mt-2 text-xl font-black">{t.photo}</span>
+          </button>
+          <button onClick={() => videoInput.current?.click()} className="flex min-h-48 flex-col items-center justify-center rounded-3xl bg-white/15 hover:bg-white/25">
+            <span className="text-7xl" aria-hidden="true">🎥</span><span className="mt-2 text-xl font-black">{t.video}</span>
+          </button>
+        </div>
+        <button onClick={() => galleryInput.current?.click()} className="mt-3 w-full text-center text-sm underline">🖼️ {t.gallery}</button>
+      </div>
       {files.length > 0 && <button onClick={() => setStep(2)} className="mt-3 min-h-14 w-full rounded-xl bg-emerald-700 text-lg font-bold text-white">✅ {files.length} 📎 → </button>}
       <button onClick={() => setStep(2)} className="mt-3 min-h-12 w-full rounded-xl text-base font-semibold text-slate-600 underline">{t.noPhoto}</button>
     </>}
@@ -224,6 +247,6 @@ export default function QuickReport() {
     </>}
 
     <p className="mt-6 text-center text-xs text-slate-500">{t.anonNote}</p>
-    {step === 1 && <p className="mt-2 text-center text-xs text-slate-500"><a href="/stations" className="font-bold underline">Find a police station</a> · <a href="/citizen" className="font-bold underline">My account</a> · <a href="/police/login" className="font-bold underline">Police staff</a></p>}
+    {step === 1 && <p className="mt-2 text-center text-xs text-slate-500"><a href="/stations" className="font-bold underline">Find a police station</a> · <a href="/citizen" className="font-bold underline">My account</a> · <a href="/police/login" className="font-bold underline">Officer Sign In</a></p>}
   </div>;
 }

@@ -17,7 +17,9 @@ html, body { min-height: 100%; }
 
 body {
   margin: 0;
-  background: var(--canvas);
+  /* Same faint tiled logo behind every page; pages leave their own background transparent so it shows through. */
+  background: var(--canvas) url("/icons/tile.svg") repeat;
+  background-size: 140px 140px;
   color: var(--ink);
   font-family: Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;

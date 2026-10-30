@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140">
+  <!-- Faint COMPOLI shield-and-pin mark, staggered so the tiling reads as a pattern, not a grid. -->
+  <defs>
+    <g id="m" transform="scale(0.075)">
+      <path d="M256 94 L396 136 C396 282 342 372 256 432 C170 372 116 282 116 136 Z" fill="none" stroke="#102a43" stroke-width="26"/>
+      <path d="M256 356 L210 258 A56 56 0 1 1 302 258 Z" fill="#102a43"/>
+    </g>
+  </defs>
+  <g opacity="0.06">
+    <use href="#m" x="16" y="6"/>
+    <use href="#m" x="86" y="76"/>
+  </g>
+</svg>

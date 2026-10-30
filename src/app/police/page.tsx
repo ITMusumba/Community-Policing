@@ -8,6 +8,7 @@ import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import PoliceShell from "@/components/PoliceShell";
 import IncidentMap from "@/components/IncidentMap";
+import { errorMessage } from "@/lib/errors";
 import { CATEGORY_LABEL, PRIORITY, STATUS_LABEL, elapsed, responseState, type Priority } from "@/lib/police";
 
 const cats = ["theft","robbery","assault","domestic_violence","sexual_violence","accident","fire","drugs","suspicious_activity","livestock_theft","land_property_dispute","arson","illegal_dumping","terrorism","other"] as const;
@@ -89,7 +90,7 @@ function IncidentCard({ report: r, now }: { report: FeedRow; now: number }) {
   async function run(args: Parameters<typeof action>[0]) {
     setError("");
     try { await action(args); setOutcome(null); setReason(""); setDetail(""); }
-    catch (e) { setError(e instanceof Error ? e.message : "Action failed."); }
+    catch (e) { setError(errorMessage(e, "Action failed.")); }
   }
   const btn = "flex min-h-11 items-center justify-center gap-1.5 rounded border px-3 text-sm font-medium disabled:opacity-40";
 
@@ -162,7 +163,7 @@ function IncidentCard({ report: r, now }: { report: FeedRow; now: number }) {
 
       <div className="flex gap-2">
         <input aria-label="Message to reporter" value={reply} onChange={e => setReply(e.target.value)} placeholder="Message to reporter (identity is never shown)" className="min-h-11 min-w-0 flex-1 rounded border border-slate-300 px-3 text-sm" />
-        <button onClick={async () => { const body = reply.trim(); if (!body) return; try { await sendReply({ reportId: r._id, body }); setReply(""); } catch (e) { setError(e instanceof Error ? e.message : "Message not sent."); } }} className={`${btn} border-slate-300`}>Send</button>
+        <button onClick={async () => { const body = reply.trim(); if (!body) return; try { await sendReply({ reportId: r._id, body }); setReply(""); } catch (e) { setError(errorMessage(e, "Message not sent.")); } }} className={`${btn} border-slate-300`}>Send</button>
       </div>
     </div>
   </article>;

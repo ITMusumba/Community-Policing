@@ -28,17 +28,48 @@ export const parishes = query({
   },
 });
 
+type Place = { kind: "district" | "subcounty" | "parish"; label: string; detail: string; lat: number; lng: number };
+
+/** Place-name suggestions for the station finder: districts, subcounties and parishes matching the typed text. */
+export const searchPlaces = query({
+  args: { text: v.string() },
+  handler: async (ctx, args): Promise<Place[]> => {
+    const text = args.text.trim().slice(0, 60);
+    if (text.length < 2) return [];
+    const lower = text.toLowerCase();
+    const districts = (await ctx.db.query("adminAreas").withIndex("by_level_district", q => q.eq("level", "district")).collect())
+      .filter(d => d.district.toLowerCase().startsWith(lower) && d.lat !== undefined)
+      .slice(0, 3)
+      .map(d => ({ kind: "district" as const, label: d.district, detail: "District", lat: d.lat!, lng: d.lng! }));
+    const subRows = await ctx.db.query("adminAreas").withSearchIndex("search_subcounty", q => q.search("subcounty", text).eq("level", "subcounty")).take(4);
+    const subcounties = (await Promise.all(subRows.map(async s => {
+      // Subcounty rows carry no coordinates; use the centre of their parishes.
+      const parishes = await ctx.db.query("adminAreas")
+        .withIndex("by_level_district_subcounty", q => q.eq("level", "parish").eq("district", s.district).eq("subcounty", s.subcounty)).take(50);
+      const located = parishes.filter(p => p.lat !== undefined);
+      if (!located.length) return null;
+      const lat = located.reduce((n, p) => n + p.lat!, 0) / located.length;
+      const lng = located.reduce((n, p) => n + p.lng!, 0) / located.length;
+      return { kind: "subcounty" as const, label: s.subcounty!, detail: `Subcounty · ${s.district}`, lat, lng };
+    }))).filter(p => p !== null);
+    const parishes = (await ctx.db.query("adminAreas").withSearchIndex("search_parish", q => q.search("parish", text).eq("level", "parish")).take(6))
+      .filter(p => p.lat !== undefined)
+      .map(p => ({ kind: "parish" as const, label: p.parish!, detail: `Parish · ${p.subcounty}, ${p.district}`, lat: p.lat!, lng: p.lng! }));
+    return [...districts, ...subcounties, ...parishes].slice(0, 10);
+  },
+});
+
 /** District/subcounty/parish for a GPS point, or null when outside the loaded boundaries. */
 export const locate = query({
   args: { lat: v.number(), lng: v.number() },
   handler: async (ctx, args) => await locatePoint(ctx, args.lat, args.lng),
 });
 
-/** Verified stations closest to a point, with straight-line distance in km. */
+/** Stations closest to a point, with straight-line distance in km. */
 export const nearestStations = query({
   args: { lat: v.number(), lng: v.number(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const stations = (await ctx.db.query("stations").collect()).filter(s => s.verified);
+    const stations = await ctx.db.query("stations").collect();
     return stations
       .map(s => ({ ...s, distanceKm: distanceKm(args.lat, args.lng, s.lat, s.lng) }))
       .sort((a, b) => a.distanceKm - b.distanceKm)

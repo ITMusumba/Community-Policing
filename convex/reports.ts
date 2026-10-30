@@ -150,7 +150,8 @@ export const createAnonymousReport = mutation({
 
 export const publicStations = query({
   args: {},
-  handler: async ctx => (await ctx.db.query("stations").collect()).filter(s => s.verified).sort((a,b) => a.name.localeCompare(b.name)),
+  // All stations; `verified` marks the ones an administrator has confirmed (OpenStreetMap imports start unconfirmed).
+  handler: async ctx => (await ctx.db.query("stations").collect()).sort((a, b) => Number(b.verified) - Number(a.verified) || a.name.localeCompare(b.name)),
 });
 
 export const trackAnonymous = query({

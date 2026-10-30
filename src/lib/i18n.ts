@@ -5,7 +5,7 @@ export const copy = {
     chooseStation: "Choose nearest station if GPS fails", track: "Track a report",
     language: "English / Luganda", voice: "Record voice note", submitted: "Report received",
     addDetails: "Add a note", submitNote: "Send update", police: "Police feed",
-    photoHint: "Photo or video", noPhoto: "No photo? Continue", whatHappened: "What happened?", skip: "Skip",
+    photoHint: "Photo or video", photo: "Photo", video: "Video", gallery: "Choose from gallery", noPhoto: "No photo? Continue", whatHappened: "What happened?", skip: "Skip",
     describe: "Tell us what happened", stopRecording: "Stop recording", voiceReady: "Voice note recorded", reRecord: "Record again",
     typeHere: "Or type here", gpsOk: "Location captured", gpsFailed: "Location unavailable", gpsWaiting: "Finding your location…",
     unsupportedWarn: "Choose a picture and record or type what happened. Without them your report will be marked Unsupported.",
@@ -18,7 +18,7 @@ export const copy = {
     language: "Luganda / English", voice: "Wandiika eddoboozi", submitted: "Alipoota efuniddwa",
     addDetails: "Yongerako obubaka", submitNote: "Weereza obubaka", police: "Alipoota za poliisi",
     // TODO(translation): native-speaker Luganda needed for the keys below; English placeholders.
-    photoHint: "Photo or video", noPhoto: "No photo? Continue", whatHappened: "What happened?", skip: "Skip",
+    photoHint: "Photo or video", photo: "Photo", video: "Video", gallery: "Choose from gallery", noPhoto: "No photo? Continue", whatHappened: "What happened?", skip: "Skip",
     describe: "Tell us what happened", stopRecording: "Stop recording", voiceReady: "Voice note recorded", reRecord: "Record again",
     typeHere: "Or type here", gpsOk: "Location captured", gpsFailed: "Location unavailable", gpsWaiting: "Finding your location…",
     unsupportedWarn: "Choose a picture and record or type what happened. Without them your report will be marked Unsupported.",

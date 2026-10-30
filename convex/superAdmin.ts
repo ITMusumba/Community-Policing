@@ -93,7 +93,7 @@ export const setOfficerDetails = mutation({
     const patch: Partial<Doc<"userProfiles">> = {};
     const badge = args.badgeNumber?.trim();
     if (badge) {
-      if (!/^[A-Za-z0-9-]{2,40}$/.test(badge)) throw new ConvexError("Badge number format is invalid.");
+      if (!/^[A-Za-z0-9][A-Za-z0-9/_. -]{1,39}$/.test(badge)) throw new ConvexError("Badge number: 2–40 letters, digits, and - _ / . or spaces.");
       const duplicate = await ctx.db.query("userProfiles").withIndex("by_badge_number", (q) => q.eq("badgeNumber", badge)).unique();
       if (duplicate && duplicate._id !== target._id) throw new ConvexError("That badge number is already registered.");
       patch.badgeNumber = badge;
