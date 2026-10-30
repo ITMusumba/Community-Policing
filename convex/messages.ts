@@ -15,6 +15,7 @@ export const startForReport = mutation({
 
     const officerId = report.assignedOfficerId ?? (isOfficer ? user._id : undefined);
     if (!officerId) throw new ConvexError("An officer must be assigned before a conversation can be opened.");
+    if (!report.reporterId) throw new ConvexError("Anonymous reports cannot open a conversation.");
     const participants = [report.reporterId, officerId];
     const existing = await ctx.db
       .query("conversations")

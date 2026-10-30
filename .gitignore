@@ -14,3 +14,4 @@ android/key.properties
 *.keystore
 .DS_Store
 *.log
+tsconfig.tsbuildinfo

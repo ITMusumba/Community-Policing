@@ -5,8 +5,8 @@ import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import AuthPanel from "@/components/AuthPanel";
 
-const cats = ["theft","robbery","assault","domestic_violence","sexual_violence","accident","fire","drugs","suspicious_activity","livestock_theft","land_property_dispute","other"];
-const statuses = ["received","seen","assigned","en_route","closed","duplicate","false"];
+const cats = ["theft","robbery","assault","domestic_violence","sexual_violence","accident","fire","drugs","suspicious_activity","livestock_theft","land_property_dispute","other"] as const;
+const statuses = ["received","seen","assigned","en_route","closed","duplicate","false"] as const;
 const icons: Record<string,string> = { theft:"👜", robbery:"🔫", assault:"🩹", domestic_violence:"🏠", sexual_violence:"🛑", accident:"🚗", fire:"🔥", drugs:"💊", suspicious_activity:"👁️", livestock_theft:"🐄", land_property_dispute:"🏡", other:"❔" };
 function ago(time: number) { const mins = Math.max(0, Math.floor((Date.now()-time)/60000)); return mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.floor(mins/60)}h ago` : `${Math.floor(mins/1440)}d ago`; }
 
