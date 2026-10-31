@@ -141,13 +141,23 @@ Complaints *about police conduct* are a separate flow (the existing `complaints`
 
 ## Build order
 
-1. Rework the schema: anonymous reports, crime categories, admin areas, stations, media.
-2. Quick report flow: camera, GPS, voice note, offline queue, tracking code. Test on a low-end Android phone with low-literacy users.
-3. Automatic area and station lookup from GPS.
-4. Police feed with filters and quick actions.
-5. Assignment, status timeline, and anonymous follow-up messaging.
-6. Station map and moderated updates.
-7. Dashboards, duplicate grouping, hotspot maps.
-8. Language packs and audio prompts completed for all listed languages.
+**Done (demo):** schema, anonymous quick report, nearest-station routing, live police feed, assignment and actions, anonymous follow-up, super-admin user management.
 
-Steps 1–4 form a demo for police leadership.
+**Next — leave demo mode (in this order):**
+1. **Professional police interface** — apply the "Professional standard" rules below across police and admin screens.
+2. **Android app** — Capacitor native project, native camera/GPS/permissions, secure session storage, signed release build, tested on a low-end phone.
+3. **Face blurring** — on the phone before upload where possible; originals visible only to authorised officers; every view of an original is audit-logged.
+4. **Dashboards** — by station, district, region and HQ: open reports, time to first response, time to resolve, overdue, hotspots.
+5. Real location lookup (UBOS boundaries), duplicate grouping, station map with moderated updates, data-retention rules.
+6. **Local languages** — remaining language packs and audio prompts.
+7. **Drag-a-pin location** when GPS is weak (until then, the station picker is the fallback).
+
+## Professional standard (police and admin screens)
+
+- Sober, institutional look: dark navy and white, restrained accents; no emoji on police or admin screens — use a consistent line-icon set.
+- Formal language: "Incident", "Occurrence", "Acknowledge", "Dispatch", "Escalate", "Close with outcome" — not casual wording.
+- Each incident has a formal reference number alongside the citizen tracking code.
+- Consequential actions (close, mark false, escalate) require a reason and a confirmation; all are audit-logged.
+- Priority levels (P1–P4) and response timers are visible on every incident.
+- The feed shows the information an officer needs to act, not entertainment: time, location, category, priority, evidence, status, assigned officer.
+- Citizen screens stay simple and pictorial (Rule 1), but use a calm, official tone and carry the app's official identity and a clear privacy notice.
