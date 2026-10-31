@@ -12,7 +12,7 @@ const IDLE_LIMIT_MS = 15 * 60 * 1000;
 const STAFF = ["officer", "admin", "super_admin"];
 
 /** Shared frame for every police/admin screen: access gate, official header, idle sign-out. */
-export default function PoliceShell({ active, children }: { active: "incidents" | "dashboard"; children: (profile: Doc<"userProfiles">) => ReactNode }) {
+export default function PoliceShell({ active, children }: { active: "incidents" | "dashboard" | "admin"; children: (profile: Doc<"userProfiles">) => ReactNode }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { signOut } = useAuthActions();
   const profile = useQuery(api.profiles.me, isAuthenticated ? {} : "skip");
@@ -50,7 +50,7 @@ export default function PoliceShell({ active, children }: { active: "incidents" 
       <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-2" aria-label="Police sections">
         {tab("/police", "Incidents", ListChecks, active === "incidents")}
         {tab("/police/dashboard", "Dashboard", LayoutDashboard, active === "dashboard")}
-        {isAdmin && tab("/super-admin", "Administration", Settings, false)}
+        {isAdmin && tab("/super-admin", "Administration", Settings, active === "admin")}
       </nav>
     </header>
     {children(profile)}

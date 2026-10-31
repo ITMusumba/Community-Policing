@@ -191,5 +191,7 @@ export default defineSchema({
     entityId: v.string(),
     details: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_entity_created", ["entityType", "entityId", "createdAt"]),
+  })
+    .index("by_entity_created", ["entityType", "entityId", "createdAt"])
+    .index("by_actor_created", ["actorId", "createdAt"]),
 });

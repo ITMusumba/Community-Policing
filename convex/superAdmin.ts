@@ -3,13 +3,17 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requireSuperAdmin } from "./lib/auth";
 
+const OPEN = new Set(["received", "seen", "assigned", "en_route"]);
+const who = (p: Doc<"userProfiles"> | null) => (p ? `${p.displayName}${p.badgeNumber ? ` (${p.badgeNumber})` : ""}` : "Unknown");
+
 export const listUsers = query({
   args: {},
   handler: async (ctx) => {
     await requireSuperAdmin(ctx);
     const profiles = await ctx.db.query("userProfiles").collect();
-    return profiles.map(({ _id, displayName, role, badgeNumber, station, stationId, district, isActive, createdAt }) => ({
-      _id, displayName, role, badgeNumber, station, stationId, district, isActive, createdAt,
+    return await Promise.all(profiles.map(async ({ _id, displayName, role, badgeNumber, station, stationId, district, isActive, createdAt }) => {
+      const assigned = role === "citizen" ? [] : await ctx.db.query("reports").withIndex("by_assigned_officer", q => q.eq("assignedOfficerId", _id)).collect();
+      return { _id, displayName, role, badgeNumber, station, stationId, district, isActive, createdAt, openCases: assigned.filter(r => OPEN.has(r.status)).length };
     }));
   },
 });
@@ -110,5 +114,63 @@ export const setOfficerDetails = mutation({
       details: [badge, patch.station].filter(Boolean).join(" / ") || undefined, createdAt: Date.now(),
     });
     return { success: true };
+  },
+});
+
+/** Full service record of one officer: cases held and every recorded action. Read access is itself audited by the UI caller. */
+export const officerRecord = query({
+  args: { userId: v.id("userProfiles") },
+  handler: async (ctx, args) => {
+    await requireSuperAdmin(ctx);
+    const officer = await ctx.db.get(args.userId);
+    if (!officer) throw new ConvexError("User not found.");
+    const assigned = await ctx.db.query("reports").withIndex("by_assigned_officer", q => q.eq("assignedOfficerId", officer._id)).collect();
+    const actions = await ctx.db.query("auditLogs").withIndex("by_actor_created", q => q.eq("actorId", officer._id)).order("desc").take(100);
+    const refs = new Map<string, string>();
+    for (const a of actions) if (a.entityType === "report" && !refs.has(a.entityId)) {
+      const id = ctx.db.normalizeId("reports", a.entityId);
+      const r = id ? await ctx.db.get(id) : null;
+      refs.set(a.entityId, r ? (r.referenceNumber ?? r.trackingCode) : a.entityId);
+    }
+    const toCase = (r: Doc<"reports">) => ({ _id: r._id, ref: r.referenceNumber ?? r.trackingCode, category: r.category, status: r.status, priority: r.priority ?? "p4", createdAt: r.createdAt, updatedAt: r.updatedAt, place: [r.parish, r.subcounty, r.district].filter(Boolean).join(", ") });
+    return {
+      officer: { _id: officer._id, name: who(officer), role: officer.role, station: officer.station, district: officer.district, isActive: officer.isActive },
+      openCases: assigned.filter(r => OPEN.has(r.status)).sort((a, b) => a.createdAt - b.createdAt).map(toCase),
+      closedCases: assigned.filter(r => !OPEN.has(r.status)).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50).map(toCase),
+      actions: actions.map(a => ({ _id: a._id, action: a.action, details: a.details, createdAt: a.createdAt, entity: a.entityType === "report" ? refs.get(a.entityId) : a.entityType })),
+    };
+  },
+});
+
+/**
+ * Hand over every open case held by one officer to another, as a recorded handover on each case.
+ * Optionally disables the departing officer's account in the same step. Their history stays under their name.
+ */
+export const handoverCases = mutation({
+  args: { fromUserId: v.id("userProfiles"), toUserId: v.id("userProfiles"), reason: v.string(), disableAccount: v.boolean() },
+  handler: async (ctx, args) => {
+    const actor = await requireSuperAdmin(ctx);
+    const reason = args.reason.trim().slice(0, 500);
+    if (!reason) throw new ConvexError("A reason for the handover is required.");
+    if (args.fromUserId === args.toUserId) throw new ConvexError("Choose a different receiving officer.");
+    const from = await ctx.db.get(args.fromUserId);
+    const to = await ctx.db.get(args.toUserId);
+    if (!from) throw new ConvexError("Departing officer not found.");
+    if (!to || !to.isActive || (to.role !== "officer" && to.role !== "admin" && to.role !== "super_admin")) throw new ConvexError("The receiving officer must be an active police account.");
+    const now = Date.now();
+    const cases = (await ctx.db.query("reports").withIndex("by_assigned_officer", q => q.eq("assignedOfficerId", from._id)).collect()).filter(r => OPEN.has(r.status));
+    const note = `Handed over from ${who(from)} to ${who(to)} — ${reason}`;
+    for (const r of cases) {
+      await ctx.db.patch(r._id, { assignedOfficerId: to._id, updatedAt: now });
+      await ctx.db.insert("reportUpdates", { reportId: r._id, actorId: actor._id, fromStatus: r.status, toStatus: r.status, note, createdAt: now });
+      await ctx.db.insert("auditLogs", { actorId: actor._id, action: "report.handover", entityType: "report", entityId: r._id, details: note, createdAt: now });
+    }
+    if (args.disableAccount) {
+      if (from._id === actor._id || from.role === "super_admin") throw new ConvexError("Super-admin accounts cannot be disabled here.");
+      await ctx.db.patch(from._id, { isActive: false });
+      await ctx.db.insert("auditLogs", { actorId: actor._id, action: "user.disable", entityType: "userProfile", entityId: from._id, details: reason, createdAt: now });
+    }
+    await ctx.db.insert("auditLogs", { actorId: actor._id, action: "user.handover", entityType: "userProfile", entityId: from._id, details: `${cases.length} case(s) to ${who(to)} — ${reason}`, createdAt: now });
+    return { moved: cases.length };
   },
 });
