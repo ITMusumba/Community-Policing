@@ -106,6 +106,8 @@ function IncidentCard({ report: r, now }: { report: FeedRow; now: number }) {
         <h2 className="text-lg font-semibold">{CATEGORY_LABEL[r.category]}</h2>
         <p className="flex items-center gap-1 text-sm text-slate-600"><Clock size={14} aria-hidden="true" />Received {elapsed(now - r.createdAt)} ago · {new Date(r.createdAt).toLocaleString("en-UG", { dateStyle: "medium", timeStyle: "short" })}</p>
       </div>
+      {r.supportNote && <p className="mt-2 flex items-center gap-1.5 rounded border border-amber-400 bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-900"><AlertTriangle size={15} aria-hidden="true" />{r.supportNote}</p>}
+      {r.description && <blockquote className="mt-2 border-l-4 border-slate-300 pl-3 text-sm text-slate-800"><span className="block text-xs uppercase tracking-wide text-slate-500">Reporter&apos;s description</span>{r.description}</blockquote>}
       {open && <p className={`mt-2 flex items-center gap-1.5 rounded px-2 py-1 text-sm font-medium ${timer.tone}`}>{timer.overdue && <AlertTriangle size={15} aria-hidden="true" />}{timer.text}</p>}
       <p className="mt-2 flex items-start gap-1.5 text-sm"><MapPin size={15} className="mt-0.5 shrink-0 text-slate-500" aria-hidden="true" /><span>{[r.parish, r.subcounty, r.district].filter(Boolean).join(", ") || "Location not determined"}<span className="text-slate-500"> · GPS {r.accuracyM ? `±${Math.round(r.accuracyM)} m` : "not provided"}</span>
         {r.latitude !== undefined && r.longitude !== undefined && <> · <a className="inline-flex items-center gap-0.5 text-blue-800 underline" href={`https://maps.google.com/?q=${r.latitude},${r.longitude}`} target="_blank" rel="noreferrer">Open in maps<ExternalLink size={12} aria-hidden="true" /></a></>}</span></p>

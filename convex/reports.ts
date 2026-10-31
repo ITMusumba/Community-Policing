@@ -107,7 +107,8 @@ export const generateUploadUrl = mutation({
 
 export const createAnonymousReport = mutation({
   args: {
-    deviceHash: v.string(), category, latitude: v.optional(v.number()), longitude: v.optional(v.number()),
+    deviceHash: v.string(), category: v.optional(category), description: v.optional(v.string()),
+    latitude: v.optional(v.number()), longitude: v.optional(v.number()),
     accuracyM: v.optional(v.number()), fallbackStationId: v.optional(v.id("stations")), media,
   },
   handler: async (ctx, args) => {
@@ -123,12 +124,19 @@ export const createAnonymousReport = mutation({
     const token = randomToken();
     let trackingCode = makeTrackingCode();
     for (let tries = 0; tries < 5 && await ctx.db.query("reports").withIndex("by_tracking_code", q => q.eq("trackingCode", trackingCode)).unique(); tries++) trackingCode = makeTrackingCode();
+    // The camera is the evidence; the incident type and a voice/text description are required context.
+    // Reports missing them are still accepted but flagged "Unsupported" for officers.
+    const description = args.description?.trim().slice(0, 3000) || undefined;
+    const missing: string[] = [];
+    if (!args.category) missing.push("no incident type selected");
+    if (!description && !args.media.some(m => m.kind === "voice")) missing.push("no voice or text description");
+    const category = args.category ?? "other";
     const reportId = await ctx.db.insert("reports", {
-      category: args.category, status: "received", trackingCode, followUpTokenHash: await tokenHash(token),
+      category, description, supportNote: missing.length ? `Unsupported — ${missing.join("; ")}` : undefined, status: "received", trackingCode, followUpTokenHash: await tokenHash(token),
       deviceHash: args.deviceHash, latitude: args.latitude, longitude: args.longitude, accuracyM: args.accuracyM,
       stationId: station?._id, district: station?.district, subcounty: station?.subcounty, parish: station?.parish,
       verified: false, createdAt: now, updatedAt: now,
-      priority: defaultPriority(args.category),
+      priority: defaultPriority(category),
       referenceNumber: await nextReferenceNumber(ctx, station?.district, now),
     });
     for (const item of args.media) await ctx.db.insert("reportMedia", { reportId, storageId: item.storageId, kind: item.kind, createdAt: now });

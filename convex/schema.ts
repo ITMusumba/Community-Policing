@@ -65,6 +65,8 @@ export default defineSchema({
     priority: v.optional(v.union(v.literal("p1"), v.literal("p2"), v.literal("p3"), v.literal("p4"))),
     firstResponseAt: v.optional(v.number()),
     closeReason: v.optional(v.string()),
+    // Set when the citizen sent no incident type and/or no voice/text description.
+    supportNote: v.optional(v.string()),
   })
     .index("by_tracking_code", ["trackingCode"])
     .index("by_reference_number", ["referenceNumber"])

@@ -6,14 +6,14 @@ import { api } from "@/convex/_generated/api";
 import { copy, type Language } from "@/lib/i18n";
 
 const categories = [
-  ["🚲", "theft"], ["🔫", "robbery"], ["🩹", "assault"], ["🏠", "domestic_violence"],
+  ["👜", "theft"], ["🔪", "robbery"], ["🤕", "assault"], ["🏠", "domestic_violence"],
   ["🛑", "sexual_violence"], ["🚗", "accident"], ["🔥", "fire"], ["💊", "drugs"],
   ["👁️", "suspicious_activity"], ["🐄", "livestock_theft"], ["🏡", "land_property_dispute"], ["❔", "other"],
 ] as const;
 type Category = typeof categories[number][1];
 type MediaItem = { storageId: string; kind: "photo" | "video" | "voice" };
 // A queued report keeps its compressed photos/video/voice as Blobs on the phone until it can be uploaded.
-type Pending = { deviceHash: string; category: Category; latitude?: number; longitude?: number; accuracyM?: number; fallbackStationId?: string; blobs: { blob: Blob; kind: MediaItem["kind"] }[] };
+type Pending = { deviceHash: string; category?: Category; description?: string; latitude?: number; longitude?: number; accuracyM?: number; fallbackStationId?: string; blobs: { blob: Blob; kind: MediaItem["kind"] }[] };
 
 function openQueue(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -50,7 +50,9 @@ async function compressImage(file: File): Promise<Blob> {
 
 export default function QuickReport() {
   const [language, setLanguage] = useState<Language>("en");
-  const [category, setCategory] = useState<Category>("other");
+  const [category, setCategory] = useState<Category | null>(null);
+  const [description, setDescription] = useState("");
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [files, setFiles] = useState<File[]>([]);
   const [voice, setVoice] = useState<Blob | null>(null);
   const [recording, setRecording] = useState(false);
@@ -95,7 +97,7 @@ export default function QuickReport() {
       const blobs: Pending["blobs"] = [];
       for (const file of files) blobs.push({ blob: file.type.startsWith("image/") ? await compressImage(file) : file, kind: file.type.startsWith("video/") ? "video" : "photo" });
       if (voice) blobs.push({ blob: voice, kind: "voice" });
-      pending = { deviceHash: await hashDeviceId(), category, latitude: position?.latitude, longitude: position?.longitude, accuracyM: position?.accuracyM, fallbackStationId: stationId || undefined, blobs };
+      pending = { deviceHash: await hashDeviceId(), category: category ?? undefined, description: description.trim() || undefined, latitude: position?.latitude, longitude: position?.longitude, accuracyM: position?.accuracyM, fallbackStationId: stationId || undefined, blobs };
       if (!navigator.onLine) { await queueReport(pending); setWaiting(true); return; }
       const created = await sendPending(pending);
       setResult(created);
@@ -152,24 +154,67 @@ export default function QuickReport() {
     <a className="mt-5 underline" href={`/track?code=${result.trackingCode}`}>{t.track}</a>
   </main>;
 
+
+  const CAT_LABEL: Record<Category, string> = {
+    theft: "Theft", robbery: "Robbery", assault: "Assault", domestic_violence: "Home violence", sexual_violence: "Sexual assault",
+    accident: "Accident", fire: "Fire", drugs: "Drugs", suspicious_activity: "Suspicious", livestock_theft: "Animal theft",
+    land_property_dispute: "Land", other: "Other",
+  };
+  const speak = (text: string) => { try { window.speechSynthesis?.cancel(); window.speechSynthesis?.speak(new SpeechSynthesisUtterance(text)); } catch { /* no speech */ } };
+  const hasDescription = Boolean(description.trim() || voice);
+  const Dots = () => <div className="flex items-center gap-2" aria-label={`Step ${step} of 3`}>{[1, 2, 3].map(n => <span key={n} className={`h-2.5 w-8 rounded-full ${n <= step ? "bg-[#176b87]" : "bg-slate-300"}`} />)}</div>;
+  const header = <div className="flex items-center justify-between gap-3">
+    {step > 1 ? <button onClick={() => setStep(step === 3 ? 2 : 1)} className="min-h-12 rounded-xl border px-4 text-lg font-bold" aria-label="Back">←</button> : <h1 className="text-xl font-black">{t.title}</h1>}
+    <Dots />
+    <button className="min-h-12 rounded-xl border px-3 font-bold" onClick={() => setLanguage(language === "en" ? "lg" : "en")}>🌐 {language === "en" ? "EN" : "LG"}</button>
+  </div>;
+
   return <div className="mx-auto max-w-xl px-4 py-5 pb-10">
-    <div className="flex items-center justify-between gap-3"><h1 className="text-xl font-black">{t.title}</h1><button className="min-h-12 rounded-xl border px-3 font-bold" onClick={() => setLanguage(language === "en" ? "lg" : "en")}>🌐 {language === "en" ? "EN" : "LG"}</button></div>
-    <a href="tel:999" className="mt-4 flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 text-lg font-black text-white">🚨 {t.emergency}</a>
-    <button onClick={() => fileInput.current?.click()} className="mt-5 flex min-h-64 w-full flex-col items-center justify-center rounded-[2rem] bg-[#176b87] text-white shadow-lg">
-      <span className="text-8xl" aria-hidden="true">📷</span><span className="mt-3 text-2xl font-black">{t.report}</span><span className="mt-1 text-sm">Photo or video</span>
-    </button>
-    <input ref={fileInput} className="hidden" type="file" accept="image/*,video/*" capture="environment" multiple onChange={e => setFiles(Array.from(e.target.files ?? []))} />
-    {files.length > 0 && <p className="mt-2 text-sm">📎 {files.length} file(s) selected</p>}
-    <div className="mt-5 grid grid-cols-4 gap-2 sm:grid-cols-6">{categories.map(([emoji, value]) => <button key={value} aria-label={value.replaceAll("_", " ")} aria-pressed={category === value} onClick={() => setCategory(value)} className={`min-h-14 rounded-xl border text-2xl ${category === value ? "border-[#176b87] bg-cyan-50 ring-2 ring-[#176b87]" : "bg-white"}`}>{emoji}</button>)}</div>
-    <button onClick={toggleVoice} className="mt-4 min-h-14 w-full rounded-xl border-2 border-[#176b87] font-bold">{recording ? "⏹️ Stop recording" : voice ? "🎙️ Voice note ready" : `🎙️ ${t.voice}`}</button>
-    <div className="mt-4 rounded-2xl bg-slate-100 p-4">
-      <p className="font-bold">{position ? `📍 GPS captured (±${Math.round(position.accuracyM)} m)` : gpsFailed ? "📍 GPS unavailable" : "📍 Getting GPS location…"}</p>
-      {gpsFailed && <label className="mt-2 block text-sm">{t.chooseStation}<select value={stationId} onChange={e => setStationId(e.target.value)} className="mt-2 min-h-12 w-full rounded-xl border bg-white p-2"><option value="">Select station</option>{stations?.map(s => <option key={s._id} value={s._id}>{s.name} — {s.district}</option>)}</select></label>}
-    </div>
-    {waiting && <p className="mt-3 rounded-xl bg-amber-100 p-3 font-bold">🕓 {t.waiting}</p>}
-    {error && <p role="alert" className="mt-3 rounded-xl bg-red-100 p-3 text-red-800">{error}</p>}
-    <button disabled={sending || (!position && !stationId)} onClick={() => void submit()} className="mt-5 min-h-16 w-full rounded-2xl bg-[#102a43] text-xl font-black text-white disabled:opacity-50">{sending ? "Sending…" : `📤 ${t.send}`}</button>
-    <p className="mt-3 text-center text-xs text-slate-500">You can report without signing in. This app does not replace emergency services.</p>
-    <p className="mt-2 text-center text-xs text-slate-500"><a href="/account" className="font-bold underline">Police staff: sign in or create an account</a></p>
+    {header}
+    <input ref={fileInput} className="hidden" type="file" accept="image/*,video/*" capture="environment" multiple onChange={e => { const picked = Array.from(e.target.files ?? []); setFiles(picked); if (picked.length) setStep(2); }} />
+
+    {step === 1 && <>
+      <a href="tel:999" className="mt-4 flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 text-lg font-black text-white">🚨 {t.emergency}</a>
+      <button onClick={() => fileInput.current?.click()} className="mt-5 flex min-h-72 w-full flex-col items-center justify-center rounded-[2rem] bg-[#176b87] text-white shadow-lg">
+        <span className="text-8xl" aria-hidden="true">📷</span><span className="mt-3 text-2xl font-black">{t.report}</span><span className="mt-1 text-sm">{t.photoHint}</span>
+      </button>
+      {files.length > 0 && <button onClick={() => setStep(2)} className="mt-3 min-h-14 w-full rounded-xl bg-emerald-700 text-lg font-bold text-white">✅ {files.length} 📎 → </button>}
+      <button onClick={() => setStep(2)} className="mt-3 min-h-12 w-full rounded-xl text-base font-semibold text-slate-600 underline">{t.noPhoto}</button>
+    </>}
+
+    {step === 2 && <>
+      <h2 className="mt-6 flex items-center justify-center gap-2 text-center text-2xl font-black">❓ {t.whatHappened} <button onClick={() => speak(t.whatHappened)} aria-label="Read aloud" className="text-2xl">🔊</button></h2>
+      <div className="mt-5 grid grid-cols-3 gap-3">{categories.map(([emoji, value]) => <button key={value} aria-pressed={category === value}
+        onClick={() => { setCategory(value); speak(CAT_LABEL[value]); setStep(3); }}
+        className={`flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 bg-white ${category === value ? "border-[#176b87] ring-4 ring-cyan-200" : "border-slate-300"}`}>
+        <span className="text-5xl" aria-hidden="true">{emoji}</span><span className="mt-1 text-xs font-semibold text-slate-700">{CAT_LABEL[value]}</span></button>)}</div>
+      <button onClick={() => { setCategory(null); setStep(3); }} className="mt-4 min-h-12 w-full rounded-xl text-base font-semibold text-slate-600 underline">{t.skip}</button>
+    </>}
+
+    {step === 3 && <>
+      <h2 className="mt-6 flex items-center justify-center gap-2 text-center text-2xl font-black">🗣️ {t.describe} <button onClick={() => speak(t.describe)} aria-label="Read aloud" className="text-2xl">🔊</button></h2>
+      <div className="mt-3 flex justify-center gap-3 text-sm text-slate-700">
+        <span>{files.length ? `📷 ✅ ${files.length}` : "📷 —"}</span><span>{category ? `${categories.find(c => c[1] === category)?.[0]} ✅` : "❓ —"}</span>
+      </div>
+      <button onClick={toggleVoice} className={`mt-5 flex min-h-36 w-full flex-col items-center justify-center rounded-[2rem] text-white shadow ${recording ? "bg-red-700" : voice ? "bg-emerald-700" : "bg-[#176b87]"}`}>
+        <span className="text-7xl" aria-hidden="true">{recording ? "⏹️" : voice ? "✅" : "🎙️"}</span>
+        <span className="mt-2 text-xl font-black">{recording ? t.stopRecording : voice ? t.voiceReady : t.voice}</span>
+      </button>
+      {voice && !recording && <button onClick={() => { setVoice(null); void toggleVoice(); }} className="mt-2 min-h-11 w-full text-sm font-semibold text-slate-600 underline">🔁 {t.reRecord}</button>}
+      <label className="mt-4 block text-sm font-semibold text-slate-700">✍️ {t.typeHere}
+        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} maxLength={3000} className="mt-1 w-full rounded-xl border-2 border-slate-300 bg-white p-3 text-base" />
+      </label>
+      <div className="mt-4 rounded-2xl bg-slate-100 p-4">
+        <p className="font-bold">{position ? `📍 ${t.gpsOk} (±${Math.round(position.accuracyM)} m)` : gpsFailed ? `📍 ${t.gpsFailed}` : `📍 ${t.gpsWaiting}`}</p>
+        {gpsFailed && <label className="mt-2 block text-sm">{t.chooseStation}<select value={stationId} onChange={e => setStationId(e.target.value)} className="mt-2 min-h-12 w-full rounded-xl border bg-white p-2"><option value="">—</option>{stations?.map(s => <option key={s._id} value={s._id}>{s.name} — {s.district}</option>)}</select></label>}
+      </div>
+      {(!category || !hasDescription) && <p className="mt-3 rounded-xl border-2 border-amber-400 bg-amber-50 p-3 font-semibold text-amber-900">⚠️ {t.unsupportedWarn}</p>}
+      {waiting && <p className="mt-3 rounded-xl bg-amber-100 p-3 font-bold">🕓 {t.waiting}</p>}
+      {error && <p role="alert" className="mt-3 rounded-xl bg-red-100 p-3 text-red-800">{error}</p>}
+      <button disabled={sending || recording || (!position && !stationId)} onClick={() => void submit()} className="mt-5 min-h-16 w-full rounded-2xl bg-[#102a43] text-xl font-black text-white disabled:opacity-50">{sending ? "…" : `📤 ${t.send}`}</button>
+    </>}
+
+    <p className="mt-6 text-center text-xs text-slate-500">{t.anonNote}</p>
+    {step === 1 && <p className="mt-2 text-center text-xs text-slate-500"><a href="/account" className="font-bold underline">Police staff: sign in</a></p>}
   </div>;
 }
