@@ -191,16 +191,12 @@ export const officerFeed = query({
     category: v.optional(category), status: v.optional(status),
   },
   handler: async (ctx, args) => {
-    const officer = await requireOfficer(ctx);
+    // Every officer can see every district; the district filter is a view choice, not a permission.
+    await requireOfficer(ctx);
     const base = args.district
       ? await ctx.db.query("reports").withIndex("by_district_created", q => q.eq("district", args.district!)).order("desc").take(200)
-      : officer.role === "admin" || officer.role === "super_admin"
-        ? await ctx.db.query("reports").withIndex("by_created_at").order("desc").take(200)
-        : officer.district
-          ? await ctx.db.query("reports").withIndex("by_district_created", q => q.eq("district", officer.district!)).order("desc").take(200)
-          : [];
+      : await ctx.db.query("reports").withIndex("by_created_at").order("desc").take(200);
     const rows = base.filter(r =>
-      (officer.role === "admin" || officer.role === "super_admin" || r.district === officer.district) &&
       (!args.subcounty || r.subcounty === args.subcounty) && (!args.parish || r.parish === args.parish) &&
       (!args.category || r.category === args.category) && (!args.status || r.status === args.status)
     ).slice(0, 100);
@@ -243,7 +239,6 @@ export const officerAction = mutation({
     const actor = await requireOfficer(ctx);
     const report = await ctx.db.get(args.reportId);
     if (!report) throw new ConvexError("Report not found.");
-    if (actor.role !== "admin" && actor.role !== "super_admin" && report.district !== actor.district) throw new ConvexError("Report is outside your district.");
     const now = Date.now();
     const reason = args.reason?.trim().slice(0, 500);
     if (["close", "duplicate", "false"].includes(args.action) && !reason) throw new ConvexError("A reason is required to close or reject an incident.");
@@ -259,7 +254,7 @@ export const officerAction = mutation({
     if (args.action === "assign_me") assignedOfficerId = actor._id;
     if (args.officerId) {
       const target = await ctx.db.get(args.officerId);
-      if (!target || target.role !== "officer" || target.district !== report.district || target.stationId !== report.stationId) throw new ConvexError("Choose an active officer at this report's station.");
+      if (!target || target.role !== "officer" || !target.isActive) throw new ConvexError("Choose an active officer.");
       assignedOfficerId = target._id;
     }
     const terminal = ["closed", "duplicate", "false"].includes(nextStatus);
@@ -280,7 +275,7 @@ export const replyToAnonymousReport = mutation({
   handler: async (ctx, args) => {
     const officer = await requireOfficer(ctx);
     const report = await ctx.db.get(args.reportId);
-    if (!report || (officer.role !== "admin" && officer.role !== "super_admin" && report.district !== officer.district)) throw new ConvexError("Report not available.");
+    if (!report) throw new ConvexError("Report not available.");
     const body = args.body.trim().slice(0, 3000);
     if (!body) throw new ConvexError("Reply cannot be empty.");
     const now = Date.now();

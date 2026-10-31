@@ -38,9 +38,10 @@ function IncidentFeed({ profile }: { profile: Doc<"userProfiles"> }) {
     category: category ? category as typeof cats[number] : undefined, status: status ? status as typeof statuses[number] : undefined,
   });
   const reports = useMemo(() => feed ?? [], [feed]);
-  const districts = useMemo(() => [...new Set(reports.map(r => r.district).filter(Boolean))] as string[], [reports]);
-  const subcounties = useMemo(() => [...new Set(reports.filter(r => !district || r.district === district).map(r => r.subcounty).filter(Boolean))] as string[], [reports, district]);
-  const parishes = useMemo(() => [...new Set(reports.filter(r => (!district || r.district === district) && (!subcounty || r.subcounty === subcounty)).map(r => r.parish).filter(Boolean))] as string[], [reports, district, subcounty]);
+  // Full Uganda list, so an officer can look at any district even before it has reports.
+  const districts = useQuery(api.geo.districts, {}) ?? [];
+  const subcounties = useQuery(api.geo.subcounties, district ? { district } : "skip") ?? [];
+  const parishes = useQuery(api.geo.parishes, district && subcounty ? { district, subcounty } : "skip") ?? [];
   const select = "min-h-11 rounded border border-slate-300 bg-white px-2 text-sm text-slate-900";
   const [showFilters, setShowFilters] = useState(false);
   const activeFilters = [district, subcounty, parish, category, status].filter(Boolean).length;
@@ -57,7 +58,7 @@ function IncidentFeed({ profile }: { profile: Doc<"userProfiles"> }) {
     </div>
     {showFilters && <div className="mx-auto max-w-3xl px-3 pt-2">
       <div className="grid grid-cols-1 gap-2 rounded border border-slate-300 bg-white p-3 sm:grid-cols-2">
-        <select aria-label="District" value={district} onChange={e=>{setDistrict(e.target.value);setSubcounty("");setParish("");}} className={select}><option value="">{profile.district ? `District: ${profile.district}` : "All districts"}</option>{districts.map(x=><option key={x}>{x}</option>)}</select>
+        <select aria-label="District" value={district} onChange={e=>{setDistrict(e.target.value);setSubcounty("");setParish("");}} className={select}><option value="">All districts</option>{districts.map(x=><option key={x}>{x}</option>)}</select>
         <select aria-label="Subcounty" value={subcounty} onChange={e=>{setSubcounty(e.target.value);setParish("");}} className={select}><option value="">All subcounties</option>{subcounties.map(x=><option key={x}>{x}</option>)}</select>
         <select aria-label="Parish" value={parish} onChange={e=>setParish(e.target.value)} className={select}><option value="">All parishes</option>{parishes.map(x=><option key={x}>{x}</option>)}</select>
         <select aria-label="Category" value={category} onChange={e=>setCategory(e.target.value)} className={select}><option value="">All categories</option>{cats.map(x=><option key={x} value={x}>{CATEGORY_LABEL[x]}</option>)}</select>

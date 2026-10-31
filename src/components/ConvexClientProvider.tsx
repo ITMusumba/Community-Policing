@@ -8,7 +8,9 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 
   const client = useMemo(
-    () => (convexUrl ? new ConvexReactClient(convexUrl) : null),
+    // No browser "Changes you made may not be saved" prompt: it fired when sign-in redirected while the
+    // sign-in request was still finishing. Unsent reports are kept by QuickReport's own offline queue.
+    () => (convexUrl ? new ConvexReactClient(convexUrl, { unsavedChangesWarning: false }) : null),
     [convexUrl],
   );
 

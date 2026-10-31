@@ -11,18 +11,16 @@ const median = (xs: number[]) => {
 };
 
 /**
- * Operational summary over the last `days` (default 30). Officers are limited to
- * their own district; admins and super-admins can see all or pick a district.
+ * Operational summary over the last `days` (default 30). Every officer can see all
+ * districts or pick one.
  * Reads at most 2,000 recent reports — enough for a pilot; move to pre-aggregated
  * counters before national rollout.
  */
 export const summary = query({
   args: { district: v.optional(v.string()), days: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const officer = await requireOfficer(ctx);
-    const isAdmin = officer.role === "admin" || officer.role === "super_admin";
-    const district = isAdmin ? args.district : officer.district;
-    if (!isAdmin && !district) return null;
+    await requireOfficer(ctx);
+    const district = args.district;
     const now = Date.now();
     const since = now - Math.min(Math.max(args.days ?? 30, 1), 365) * 86_400_000;
     const rows = district
@@ -71,7 +69,7 @@ export const summary = query({
       stations: desc(byStation, s => s.open).map(([, s]) => ({ name: s.name, open: s.open, overdue: s.overdue, closed: s.closed, total: s.total, medianResponseMin: median(s.response) })),
       categories: desc(byCategory, n => n).map(([category, count]) => ({ category, count })),
       hotspots: desc(byParish, n => n).slice(0, 10).map(([place, count]) => ({ place, count })),
-      districts: isAdmin ? [...new Set(stations.map(s => s.district))].sort() : [],
+      districts: (await ctx.db.query("adminAreas").withIndex("by_level_district", q => q.eq("level", "district")).collect()).map(d => d.district).sort(),
     };
   },
 });

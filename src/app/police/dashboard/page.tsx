@@ -20,7 +20,6 @@ function Dashboard() {
   const data = useQuery(api.dashboard.summary, { district: district || undefined, days });
 
   if (data === undefined) return <p className="p-6 text-sm text-slate-600">Loading statistics…</p>;
-  if (data === null) return <p className="p-6 text-sm text-slate-700">Your account has no district assigned. Ask an administrator to set your station and district.</p>;
   const t = data.totals;
   const tiles: { label: string; value: string | number; alert?: boolean }[] = [
     { label: "Incidents received", value: t.received },

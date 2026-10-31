@@ -55,17 +55,28 @@ function Administration({ selfId }: { selfId: Id<"userProfiles"> }) {
   </main>;
 }
 
+const STATIONS_PER_PAGE = 15;
+
 /** Stations imported from OpenStreetMap show as "unconfirmed" until checked and verified here. */
 function StationReview() {
   const stations = useQuery(api.superAdmin.listStationsForReview, {});
   const setVerified = useMutation(api.superAdmin.setStationsVerified);
   const remove = useMutation(api.superAdmin.deleteStation);
+  const [district, setDistrict] = useState("");
   const [search, setSearch] = useState("");
   const [showVerified, setShowVerified] = useState(false);
+  const [page, setPage] = useState(0);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const q = search.trim().toLowerCase();
-  const shown = (stations ?? []).filter(s => s.verified === showVerified && `${s.name} ${s.district}`.toLowerCase().includes(q)).slice(0, 100);
+  const inView = (stations ?? []).filter(s => s.verified === showVerified);
+  // District dropdown with a count of stations in the current view (unconfirmed or verified).
+  const districtCounts = [...inView.reduce((m, s) => m.set(s.district, (m.get(s.district) ?? 0) + 1), new Map<string, number>())].sort((a, b) => a[0].localeCompare(b[0]));
+  const matching = inView.filter(s => (!district || s.district === district) && (!q || s.name.toLowerCase().includes(q)));
+  const pages = Math.max(1, Math.ceil(matching.length / STATIONS_PER_PAGE));
+  const current = Math.min(page, pages - 1);
+  const shown = matching.slice(current * STATIONS_PER_PAGE, (current + 1) * STATIONS_PER_PAGE);
   const pending = (stations ?? []).filter(s => !s.verified).length;
+  const resetPage = () => setPage(0);
 
   async function act(fn: () => Promise<unknown>, ok: string) {
     setMsg(null);
@@ -74,10 +85,15 @@ function StationReview() {
 
   return <section className="space-y-2 pt-4">
     <div><h2 className="text-lg font-semibold">Police stations</h2><p className="text-sm text-slate-600">{pending} unconfirmed. Unconfirmed stations already appear on the map, faded and marked &quot;unconfirmed&quot;. Check the name and location, then verify.</p></div>
-    <div className="flex flex-wrap gap-2">
-      <input aria-label="Search stations" placeholder="Search name or district" value={search} onChange={e => setSearch(e.target.value)} className="min-h-10 min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 text-sm" />
-      <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" checked={showVerified} onChange={e => setShowVerified(e.target.checked)} />Show verified</label>
-      <button disabled={!shown.length} onClick={() => void act(() => setVerified({ stationIds: shown.map(s => s._id), verified: !showVerified }), `${shown.length} stations ${showVerified ? "unverified" : "verified"}.`)} className={`${btn} border-slate-800 bg-slate-800 text-white`}>{showVerified ? "Unverify" : "Verify"} these {shown.length}</button>
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <select aria-label="District" value={district} onChange={e => { setDistrict(e.target.value); resetPage(); }} className="min-h-11 w-full min-w-0 rounded border border-slate-300 bg-white px-2 text-sm">
+        <option value="">All districts ({inView.length})</option>
+        {districtCounts.map(([d, n]) => <option key={d} value={d}>{d} ({n})</option>)}
+      </select>
+      <input aria-label="Search station name" placeholder="Search station name" value={search} onChange={e => { setSearch(e.target.value); resetPage(); }} className="min-h-11 w-full min-w-0 rounded border border-slate-300 bg-white px-2 text-sm" />
+      <div className="flex rounded border border-slate-300 bg-white p-0.5 text-sm sm:col-span-2">
+        {([false, true] as const).map(v => <button key={String(v)} onClick={() => { setShowVerified(v); resetPage(); }} aria-pressed={showVerified === v} className={`min-h-10 flex-1 rounded ${showVerified === v ? "bg-slate-800 font-medium text-white" : "text-slate-700"}`}>{v ? "Verified" : `Unconfirmed (${pending})`}</button>)}
+      </div>
     </div>
     {msg && <p role="status" className={`rounded px-3 py-2 text-sm ${msg.ok ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-800"}`}>{msg.text}</p>}
     {!stations && <p className="text-sm text-slate-600">Loading stations…</p>}
@@ -88,7 +104,13 @@ function StationReview() {
         <button onClick={() => { if (confirm(`Delete ${s.name}?`)) void act(() => remove({ stationId: s._id }), "Station deleted."); }} className={`${btn} border-red-300 bg-white text-red-800`}>Delete</button>
       </div>
     </li>)}</ul>
-    {stations && !shown.length && <p className="text-sm text-slate-600">No {showVerified ? "verified" : "unverified"} stations match.</p>}
+    {stations && !shown.length && <p className="text-sm text-slate-600">No {showVerified ? "verified" : "unconfirmed"} stations match.</p>}
+    {matching.length > 0 && <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+      <button disabled={current === 0} onClick={() => setPage(current - 1)} className={`${btn} border-slate-300 bg-white`}>← Previous</button>
+      <span className="text-slate-600">{current * STATIONS_PER_PAGE + 1}–{current * STATIONS_PER_PAGE + shown.length} of {matching.length} · page {current + 1}/{pages}</span>
+      <button disabled={current >= pages - 1} onClick={() => setPage(current + 1)} className={`${btn} border-slate-300 bg-white`}>Next →</button>
+    </div>}
+    {shown.length > 0 && <button onClick={() => void act(() => setVerified({ stationIds: shown.map(s => s._id), verified: !showVerified }), `${shown.length} stations ${showVerified ? "unverified" : "verified"}.`)} className={`${btn} w-full border-slate-800 bg-slate-800 text-white`}>{showVerified ? "Unverify" : "Verify"} all {shown.length} on this page</button>}
   </section>;
 }
 
@@ -231,18 +253,18 @@ function AddStaff() {
     } finally { setBusy(false); }
   }
 
-  const field = "min-h-10 rounded border border-slate-300 bg-white px-2 text-sm";
+  const field = "min-h-11 w-full min-w-0 rounded border border-slate-300 bg-white px-2 text-sm";
   return <section className="rounded border border-slate-300 bg-white">
     <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-left font-semibold"><UserPlus size={16} aria-hidden="true" />Add police officer or administrator</button>
     {issued && <div className="px-3 pb-3"><OneTimePassword email={issued.email} password={issued.password} onClose={() => setIssued(null)} /></div>}
-    {open && <form onSubmit={submit} className="grid gap-2 border-t border-slate-200 p-3 sm:grid-cols-2">
+    {open && <form onSubmit={submit} className="grid grid-cols-1 gap-2 border-t border-slate-200 p-3 sm:grid-cols-2">
       <input required minLength={2} placeholder="Full name" aria-label="Full name" value={form.displayName} onChange={set("displayName")} className={field} />
       <input required type="email" placeholder="Email (used to sign in)" aria-label="Email" value={form.email} onChange={set("email")} className={field} />
       <select aria-label="Role" value={form.role} onChange={set("role")} className={field}><option value="officer">Officer</option><option value="admin">Commander / Admin</option></select>
       <input placeholder="Badge / force number" aria-label="Badge number" value={form.badgeNumber} onChange={set("badgeNumber")} className={field} />
       <select aria-label="Station" value={form.stationId} onChange={set("stationId")} className={`${field} sm:col-span-2`}><option value="">Station (optional)</option><StationOptions stations={stations} /></select>
       {error && <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800 sm:col-span-2">{error}</p>}
-      <button disabled={busy} className={`${btn} border-slate-800 bg-slate-800 text-white sm:col-span-2`}>{busy ? "Creating…" : "Create account and one-time password"}</button>
+      <button disabled={busy} className={`${btn} border-slate-800 bg-slate-800 text-white sm:col-span-2`}>{busy ? "Creating…" : "Create account"}</button>
     </form>}
   </section>;
 }

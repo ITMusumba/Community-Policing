@@ -6,7 +6,7 @@
       <path d="M256 356 L210 258 A56 56 0 1 1 302 258 Z" fill="#102a43"/>
     </g>
   </defs>
-  <g opacity="0.06">
+  <g opacity="0.09">
     <use href="#m" x="16" y="6"/>
     <use href="#m" x="86" y="76"/>
   </g>
