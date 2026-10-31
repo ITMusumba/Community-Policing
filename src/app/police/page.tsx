@@ -1,70 +1,164 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useQuery, useMutation, useConvexAuth } from "convex/react";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { AlertTriangle, Ban, Car, CheckCircle2, Clock, Copy, ExternalLink, FileText, MapPin, SlidersHorizontal, UserCheck, XCircle } from "lucide-react";
 import { api } from "@/convex/_generated/api";
-import AuthPanel from "@/components/AuthPanel";
+import type { Doc } from "@/convex/_generated/dataModel";
+import PoliceShell from "@/components/PoliceShell";
+import { CATEGORY_LABEL, PRIORITY, STATUS_LABEL, elapsed, responseState, type Priority } from "@/lib/police";
 
 const cats = ["theft","robbery","assault","domestic_violence","sexual_violence","accident","fire","drugs","suspicious_activity","livestock_theft","land_property_dispute","other"] as const;
 const statuses = ["received","seen","assigned","en_route","closed","duplicate","false"] as const;
-const icons: Record<string,string> = { theft:"👜", robbery:"🔫", assault:"🩹", domestic_violence:"🏠", sexual_violence:"🛑", accident:"🚗", fire:"🔥", drugs:"💊", suspicious_activity:"👁️", livestock_theft:"🐄", land_property_dispute:"🏡", other:"❔" };
-function ago(time: number) { const mins = Math.max(0, Math.floor((Date.now()-time)/60000)); return mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.floor(mins/60)}h ago` : `${Math.floor(mins/1440)}d ago`; }
+type Outcome = "close" | "duplicate" | "false";
+const OUTCOMES: Record<Outcome, { title: string; reasons: string[] }> = {
+  close: { title: "Close with outcome", reasons: ["Resolved on scene", "Suspect arrested", "Referred to CID", "Referred to another agency", "No offence disclosed", "Complainant could not be reached"] },
+  duplicate: { title: "Close as duplicate", reasons: ["Duplicate of an existing incident"] },
+  false: { title: "Reject as unfounded", reasons: ["Malicious or prank report", "Unrelated content", "No incident found at location"] },
+};
 
 export default function PolicePage() {
-  const { isAuthenticated, isLoading } = useConvexAuth();
-  const profile = useQuery(api.profiles.me, isAuthenticated ? {} : "skip");
+  return <PoliceShell active="incidents">{profile => <IncidentFeed profile={profile} />}</PoliceShell>;
+}
+
+function IncidentFeed({ profile }: { profile: Doc<"userProfiles"> }) {
   const [district, setDistrict] = useState("");
   const [subcounty, setSubcounty] = useState("");
   const [parish, setParish] = useState("");
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState("");
-  const [reply, setReply] = useState<Record<string,string>>({});
-  const feed = useQuery(api.reports.officerFeed, isAuthenticated && profile && ["officer","admin","super_admin"].includes(profile.role) ? {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(t); }, []);
+
+  const feed = useQuery(api.reports.officerFeed, {
     district: district || undefined, subcounty: subcounty || undefined, parish: parish || undefined,
     category: category ? category as typeof cats[number] : undefined, status: status ? status as typeof statuses[number] : undefined,
-  } : "skip");
-  const action = useMutation(api.reports.officerAction);
-  const sendReply = useMutation(api.reports.replyToAnonymousReport);
-  const reports = feed || [];
+  });
+  const reports = useMemo(() => feed ?? [], [feed]);
   const districts = useMemo(() => [...new Set(reports.map(r => r.district).filter(Boolean))] as string[], [reports]);
   const subcounties = useMemo(() => [...new Set(reports.filter(r => !district || r.district === district).map(r => r.subcounty).filter(Boolean))] as string[], [reports, district]);
   const parishes = useMemo(() => [...new Set(reports.filter(r => (!district || r.district === district) && (!subcounty || r.subcounty === subcounty)).map(r => r.parish).filter(Boolean))] as string[], [reports, district, subcounty]);
+  const select = "min-h-11 rounded border border-slate-300 bg-white px-2 text-sm text-slate-900";
+  const [showFilters, setShowFilters] = useState(false);
+  const activeFilters = [district, subcounty, parish, category, status].filter(Boolean).length;
+  const clearFilters = () => { setDistrict(""); setSubcounty(""); setParish(""); setCategory(""); setStatus(""); };
 
-  if (isLoading) return <main className="p-6">Loading secure police access…</main>;
-  if (!isAuthenticated || !profile) return <main className="mx-auto max-w-xl p-4"><h1 className="mb-4 text-2xl font-black">👮 Police sign in</h1><AuthPanel enabled={true} staffOnly /></main>;
-  if (!["officer","admin","super_admin"].includes(profile.role)) return <main className="p-6">This account does not have police access.</main>;
+  return <>
+    {/* Filters live behind one button so the incident keeps the screen on a phone. */}
+    <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-3 pt-3">
+      <p className="text-sm text-slate-600">{feed ? `${reports.length} incident${reports.length === 1 ? "" : "s"}` : ""}{activeFilters ? " · filtered" : ""}</p>
+      <div className="flex gap-2">
+        {activeFilters > 0 && <button onClick={clearFilters} className="min-h-10 rounded px-2 text-sm text-slate-700 underline">Clear</button>}
+        <button onClick={() => setShowFilters(s => !s)} aria-expanded={showFilters} className="flex min-h-10 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-sm font-medium"><SlidersHorizontal size={15} aria-hidden="true" />Filters{activeFilters > 0 && <span className="rounded bg-[#0b1f33] px-1.5 text-xs text-white">{activeFilters}</span>}</button>
+      </div>
+    </div>
+    {showFilters && <div className="mx-auto max-w-3xl px-3 pt-2">
+      <div className="grid grid-cols-1 gap-2 rounded border border-slate-300 bg-white p-3 sm:grid-cols-2">
+        <select aria-label="District" value={district} onChange={e=>{setDistrict(e.target.value);setSubcounty("");setParish("");}} className={select}><option value="">{profile.district ? `District: ${profile.district}` : "All districts"}</option>{districts.map(x=><option key={x}>{x}</option>)}</select>
+        <select aria-label="Subcounty" value={subcounty} onChange={e=>{setSubcounty(e.target.value);setParish("");}} className={select}><option value="">All subcounties</option>{subcounties.map(x=><option key={x}>{x}</option>)}</select>
+        <select aria-label="Parish" value={parish} onChange={e=>setParish(e.target.value)} className={select}><option value="">All parishes</option>{parishes.map(x=><option key={x}>{x}</option>)}</select>
+        <select aria-label="Category" value={category} onChange={e=>setCategory(e.target.value)} className={select}><option value="">All categories</option>{cats.map(x=><option key={x} value={x}>{CATEGORY_LABEL[x]}</option>)}</select>
+        <select aria-label="Status" value={status} onChange={e=>setStatus(e.target.value)} className={select}><option value="">All statuses</option>{statuses.map(x=><option key={x} value={x}>{STATUS_LABEL[x]}</option>)}</select>
+        <button onClick={() => setShowFilters(false)} className="min-h-11 rounded bg-[#0b1f33] text-sm font-medium text-white sm:col-span-2">Apply</button>
+      </div>
+    </div>}
+    <main className="mx-auto max-w-3xl snap-y px-3 py-4">
+      {!feed && <p className="p-4 text-sm text-slate-600">Loading incidents…</p>}
+      {feed?.length === 0 && <div className="rounded border border-slate-300 bg-white p-8 text-center"><p className="font-semibold">No incidents in this view</p><p className="mt-1 text-sm text-slate-600">New incidents appear here automatically.</p></div>}
+      {reports.map(r => <IncidentCard key={r._id} report={r} now={now} />)}
+    </main>
+  </>;
+}
 
-  return <main className="h-screen snap-y snap-mandatory overflow-y-scroll bg-[#102a43] text-white">
-    <header className="sticky top-0 z-10 border-b border-white/20 bg-[#102a43]/95 p-3 backdrop-blur"><div className="flex items-center justify-between"><h1 className="font-black">👮 Police feed</h1><a href="/" className="text-sm underline">Citizen app</a></div>
-      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <select aria-label="District" value={district} onChange={e=>{setDistrict(e.target.value);setSubcounty("");setParish("");}} className="min-h-11 rounded-lg bg-white p-2 text-slate-900"><option value="">My district</option>{districts.map(x=><option key={x}>{x}</option>)}</select>
-        <select aria-label="Subcounty" value={subcounty} onChange={e=>{setSubcounty(e.target.value);setParish("");}} className="min-h-11 rounded-lg bg-white p-2 text-slate-900"><option value="">All subcounties</option>{subcounties.map(x=><option key={x}>{x}</option>)}</select>
-        <select aria-label="Parish" value={parish} onChange={e=>setParish(e.target.value)} className="min-h-11 rounded-lg bg-white p-2 text-slate-900"><option value="">All parishes</option>{parishes.map(x=><option key={x}>{x}</option>)}</select>
-        <select aria-label="Category" value={category} onChange={e=>setCategory(e.target.value)} className="min-h-11 rounded-lg bg-white p-2 text-slate-900"><option value="">All categories</option>{cats.map(x=><option key={x} value={x}>{x.replaceAll("_"," ")}</option>)}</select>
-        <select aria-label="Status" value={status} onChange={e=>setStatus(e.target.value)} className="min-h-11 rounded-lg bg-white p-2 text-slate-900"><option value="">All status</option>{statuses.map(x=><option key={x} value={x}>{x.replaceAll("_"," ")}</option>)}</select>
-      </div></header>
-    {!feed && <div className="p-6">Loading reports…</div>}
-    {feed?.length === 0 && <section className="flex min-h-[75vh] snap-start flex-col items-center justify-center p-8 text-center"><span className="text-7xl">🛡️</span><h2 className="mt-5 text-2xl font-black">No reports in this view</h2><p className="mt-2">New reports appear here automatically.</p></section>}
-    {reports.map(report => <section key={report._id} className="flex min-h-[calc(100vh-120px)] snap-start flex-col justify-between border-b border-white/15 p-4 sm:p-8">
-      <div><div className="flex items-center justify-between gap-2"><span className="rounded-full bg-white/15 px-3 py-2 text-sm">{ago(report.createdAt)}</span><span className="text-sm">{report.status.replaceAll("_"," ")}</span></div>
-        <div className="mt-5 flex min-h-52 flex-wrap items-center justify-center gap-2 rounded-3xl bg-white/10 p-2 text-8xl">
-          {report.media.length === 0 && <>{icons[report.category] || "❔"}{report.status === "received" && <span className="ml-2 text-3xl">📥</span>}</>}
-          {report.media.map(m => !m.url ? null : m.kind === "photo"
-            ? <img key={m._id} src={m.url} alt="Evidence photo" className="max-h-72 max-w-full rounded-2xl object-contain" />
-            : m.kind === "video"
-              ? <video key={m._id} src={m.url} controls className="max-h-72 max-w-full rounded-2xl" />
-              : <audio key={m._id} src={m.url} controls className="w-full" />)}
+type FeedRow = FunctionReturnType<typeof api.reports.officerFeed>[number];
+
+function IncidentCard({ report: r, now }: { report: FeedRow; now: number }) {
+  const action = useMutation(api.reports.officerAction);
+  const sendReply = useMutation(api.reports.replyToAnonymousReport);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [reason, setReason] = useState("");
+  const [detail, setDetail] = useState("");
+  const [reply, setReply] = useState("");
+  const [error, setError] = useState("");
+  const priority: Priority = r.priority ?? "p4";
+  const open = ["received", "seen", "assigned", "en_route"].includes(r.status);
+  const timer = responseState(r.createdAt, r.firstResponseAt, priority, now);
+
+  async function run(args: Parameters<typeof action>[0]) {
+    setError("");
+    try { await action(args); setOutcome(null); setReason(""); setDetail(""); }
+    catch (e) { setError(e instanceof Error ? e.message : "Action failed."); }
+  }
+  const btn = "flex min-h-11 items-center justify-center gap-1.5 rounded border px-3 text-sm font-medium disabled:opacity-40";
+
+  return <article className="mb-4 snap-start overflow-hidden rounded border border-slate-300 bg-white shadow-sm">
+    <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+      <div className="flex items-center gap-2">
+        <span className={`rounded px-2 py-0.5 text-xs font-bold ${PRIORITY[priority].badge}`}>{PRIORITY[priority].short}</span>
+        <span className="font-mono text-sm font-semibold">{r.referenceNumber ?? r.trackingCode}</span>
+      </div>
+      <span className="rounded border border-slate-300 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-700">{STATUS_LABEL[r.status]}</span>
+    </header>
+
+    <div className="px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-lg font-semibold">{CATEGORY_LABEL[r.category]}</h2>
+        <p className="flex items-center gap-1 text-sm text-slate-600"><Clock size={14} aria-hidden="true" />Received {elapsed(now - r.createdAt)} ago · {new Date(r.createdAt).toLocaleString("en-UG", { dateStyle: "medium", timeStyle: "short" })}</p>
+      </div>
+      {open && <p className={`mt-2 flex items-center gap-1.5 rounded px-2 py-1 text-sm font-medium ${timer.tone}`}>{timer.overdue && <AlertTriangle size={15} aria-hidden="true" />}{timer.text}</p>}
+      <p className="mt-2 flex items-start gap-1.5 text-sm"><MapPin size={15} className="mt-0.5 shrink-0 text-slate-500" aria-hidden="true" /><span>{[r.parish, r.subcounty, r.district].filter(Boolean).join(", ") || "Location not determined"}<span className="text-slate-500"> · GPS {r.accuracyM ? `±${Math.round(r.accuracyM)} m` : "not provided"}</span>
+        {r.latitude !== undefined && r.longitude !== undefined && <> · <a className="inline-flex items-center gap-0.5 text-blue-800 underline" href={`https://maps.google.com/?q=${r.latitude},${r.longitude}`} target="_blank" rel="noreferrer">Open in maps<ExternalLink size={12} aria-hidden="true" /></a></>}</span></p>
+      <p className="mt-1 text-sm text-slate-600">Assigned: {r.assignedOfficer ?? "Unassigned"} · Citizen ref. {r.trackingCode}</p>
+    </div>
+
+    <section aria-label="Evidence" className="bg-slate-900">
+      {r.media.filter(m => m.url).length === 0
+        ? <p className="px-4 py-6 text-center text-sm text-slate-400">No photo or video evidence submitted.</p>
+        : <div className="flex snap-x snap-mandatory gap-1 overflow-x-auto">{r.media.map(m => !m.url ? null : m.kind === "photo"
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img key={m._id} src={m.url} alt="Evidence photograph" className="max-h-[50vh] w-full shrink-0 snap-center object-contain" />
+            : m.kind === "video" ? <video key={m._id} src={m.url} controls playsInline className="max-h-[50vh] w-full shrink-0 snap-center" />
+            : <div key={m._id} className="w-full shrink-0 snap-center p-4"><p className="mb-1 text-xs uppercase tracking-wide text-slate-400">Voice statement</p><audio src={m.url} controls className="w-full" /></div>)}</div>}
+    </section>
+
+    <div className="space-y-3 px-4 py-3">
+      {r.notes.length > 0 && <details open className="rounded border border-slate-200">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">Statements and correspondence ({r.notes.length})</summary>
+        <ul className="divide-y divide-slate-100 text-sm">{r.notes.map(n => <li key={n._id} className="px-3 py-2"><span className="font-medium">{n.author === "citizen" ? "Reporter (anonymous)" : "Police"}</span> <span className="text-xs text-slate-500">{new Date(n.createdAt).toLocaleString("en-UG")}</span><p>{n.body}{n.url && <> <a className="text-blue-800 underline" href={n.url} target="_blank" rel="noreferrer">attachment</a></>}</p></li>)}</ul>
+      </details>}
+      <details className="rounded border border-slate-200">
+        <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-sm font-semibold"><FileText size={14} aria-hidden="true" />Occurrence log ({r.log.length})</summary>
+        <ol className="divide-y divide-slate-100 font-mono text-xs">{r.log.map(l => <li key={l._id} className="px-3 py-1.5"><span className="text-slate-500">{new Date(l.createdAt).toLocaleString("en-UG")}</span> — {l.note ?? STATUS_LABEL[l.toStatus as keyof typeof STATUS_LABEL] ?? l.toStatus} — <span className="text-slate-600">{l.actor}</span></li>)}</ol>
+      </details>
+
+      {open && <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <button className={`${btn} border-slate-300`} disabled={r.status !== "received"} onClick={() => void run({ reportId: r._id, action: "verify" })}><CheckCircle2 size={16} aria-hidden="true" />Acknowledge</button>
+        <button className={`${btn} border-slate-300`} onClick={() => void run({ reportId: r._id, action: "assign_me" })}><UserCheck size={16} aria-hidden="true" />Take ownership</button>
+        <button className={`${btn} border-slate-300`} disabled={r.status === "en_route"} onClick={() => void run({ reportId: r._id, action: "en_route" })}><Car size={16} aria-hidden="true" />Dispatch</button>
+        <select aria-label="Priority" value={priority} onChange={e => void run({ reportId: r._id, action: "set_priority", priority: e.target.value as Priority })} className="min-h-11 rounded border border-slate-300 bg-white px-2 text-sm">{(Object.keys(PRIORITY) as Priority[]).map(p => <option key={p} value={p}>{PRIORITY[p].label}</option>)}</select>
+        <button className={`${btn} border-[#0b1f33] bg-[#0b1f33] text-white`} onClick={() => setOutcome("close")}><CheckCircle2 size={16} aria-hidden="true" />Close…</button>
+        <button className={`${btn} border-slate-300`} onClick={() => setOutcome("duplicate")}><Copy size={16} aria-hidden="true" />Duplicate…</button>
+        <button className={`${btn} border-red-300 text-red-800`} onClick={() => setOutcome("false")}><Ban size={16} aria-hidden="true" />Unfounded…</button>
+      </div>}
+
+      {outcome && <div role="dialog" aria-label={OUTCOMES[outcome].title} className="rounded border-2 border-slate-800 bg-slate-50 p-3">
+        <p className="text-sm font-semibold">{OUTCOMES[outcome].title} — {r.referenceNumber ?? r.trackingCode}</p>
+        <select aria-label="Reason" value={reason} onChange={e => setReason(e.target.value)} className="mt-2 min-h-11 w-full rounded border border-slate-300 bg-white px-2 text-sm"><option value="">Select a reason (required)</option>{OUTCOMES[outcome].reasons.map(x => <option key={x}>{x}</option>)}</select>
+        <textarea value={detail} onChange={e => setDetail(e.target.value)} rows={2} placeholder="Additional remarks for the record (optional)" className="mt-2 w-full rounded border border-slate-300 p-2 text-sm" />
+        <p className="mt-1 text-xs text-slate-600">This action is recorded in the occurrence log under your name and badge number.</p>
+        <div className="mt-2 flex gap-2">
+          <button disabled={!reason} onClick={() => void run({ reportId: r._id, action: outcome, reason: detail.trim() ? `${reason}: ${detail.trim()}` : reason })} className={`${btn} border-[#0b1f33] bg-[#0b1f33] text-white`}>Confirm</button>
+          <button onClick={() => { setOutcome(null); setReason(""); setDetail(""); }} className={`${btn} border-slate-300`}><XCircle size={16} aria-hidden="true" />Cancel</button>
         </div>
-        <h2 className="mt-4 text-2xl font-black">{report.category.replaceAll("_"," ")}</h2>
-        <p className="mt-2 text-sm text-slate-200">{[report.parish,report.subcounty,report.district].filter(Boolean).join(" · ") || "Location unavailable"}</p>
-        <p className="mt-1 text-xs text-slate-300">GPS accuracy: {report.accuracyM ? `±${Math.round(report.accuracyM)} m` : "not provided"} · {report.verified ? "Verified" : "Unverified"}</p>
-        {report.latitude !== undefined && report.longitude !== undefined && <a className="mt-2 inline-block underline" href={`https://maps.google.com/?q=${report.latitude},${report.longitude}`} target="_blank" rel="noreferrer">📍 Open location</a>}
-        {report.notes.length > 0 && <div className="mt-4 space-y-2 rounded-2xl bg-white/10 p-3 text-sm">{report.notes.map(n => <p key={n._id}><strong>{n.author === "citizen" ? "Reporter" : "Police"}:</strong> {n.body}{n.url && <> · <a className="underline" href={n.url} target="_blank" rel="noreferrer">attachment</a></>}</p>)}</div>}
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {([["verify","✅ Verify"],["assign_me","👮 Assign to me"],["en_route","🚓 En route"],["close","✔️ Close"],["duplicate","🧩 Duplicate"],["false","⚠️ False/spam"]] as const).map(([key,label])=><button key={key} onClick={()=>void action({reportId:report._id,action:key})} className="min-h-12 rounded-xl bg-white px-3 text-sm font-bold text-[#102a43]">{label}</button>)}
-        </div>
-        <div className="mt-4 flex gap-2"><input aria-label="Reply to reporter" value={reply[report._id] || ""} onChange={e=>setReply(old=>({...old,[report._id]:e.target.value}))} placeholder="Anonymous reply…" className="min-w-0 flex-1 rounded-xl bg-white p-3 text-slate-900" /><button onClick={async()=>{const body=reply[report._id]?.trim();if(body){await sendReply({reportId:report._id,body});setReply(old=>({...old,[report._id]:""}));}}} className="min-h-12 rounded-xl bg-cyan-300 px-4 font-bold text-[#102a43]">Reply</button></div>
-      </div><p className="mt-5 text-center text-xs text-slate-300">Tracking {report.trackingCode} · {report.stationId ? "Station routed" : "Station not assigned"}</p>
-    </section>)}
-  </main>;
+      </div>}
+      {!open && r.closeReason && <p className="rounded bg-slate-100 px-3 py-2 text-sm"><span className="font-medium">Outcome:</span> {r.closeReason}</p>}
+      {error && <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
+
+      <div className="flex gap-2">
+        <input aria-label="Message to reporter" value={reply} onChange={e => setReply(e.target.value)} placeholder="Message to reporter (identity is never shown)" className="min-h-11 min-w-0 flex-1 rounded border border-slate-300 px-3 text-sm" />
+        <button onClick={async () => { const body = reply.trim(); if (!body) return; try { await sendReply({ reportId: r._id, body }); setReply(""); } catch (e) { setError(e instanceof Error ? e.message : "Message not sent."); } }} className={`${btn} border-slate-300`}>Send</button>
+      </div>
+    </div>
+  </article>;
 }

@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireOfficer } from "./lib/auth";
 
 const category = v.union(
@@ -65,6 +65,25 @@ async function validateMedia(ctx: any, storageId: any, kind: keyof typeof MEDIA_
  * Upload URLs are throttled: 30 per hour per anonymous device key, or per report when the caller proves
  * ownership with the tracking code and secret token. File size and type are checked when the file is attached.
  */
+type Priority = "p1" | "p2" | "p3" | "p4";
+// Initial triage by category; officers can re-prioritise. Targets are minutes to first response.
+export const PRIORITY_TARGET_MIN: Record<Priority, number> = { p1: 30, p2: 120, p3: 1440, p4: 4320 };
+function defaultPriority(category: string): Priority {
+  if (["robbery", "assault", "sexual_violence", "fire", "accident"].includes(category)) return "p1";
+  if (["domestic_violence", "theft", "livestock_theft", "drugs"].includes(category)) return "p2";
+  if (category === "suspicious_activity") return "p3";
+  return "p4";
+}
+// Formal reference: CP/<DISTRICT CODE>/<YEAR>/<6-digit sequence>, e.g. CP/KAM/2026/000123.
+async function nextReferenceNumber(ctx: MutationCtx, district: string | undefined, now: number) {
+  const code = (district ?? "UNK").replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() || "UNK";
+  const key = `${code}/${new Date(now).getUTCFullYear()}`;
+  const counter = await ctx.db.query("counters").withIndex("by_key", q => q.eq("key", key)).unique();
+  const value = (counter?.value ?? 0) + 1;
+  if (counter) await ctx.db.patch(counter._id, { value }); else await ctx.db.insert("counters", { key, value });
+  return `CP/${key}/${String(value).padStart(6, "0")}`;
+}
+
 export const generateUploadUrl = mutation({
   args: { deviceHash: v.optional(v.string()), code: v.optional(v.string()), token: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -109,6 +128,8 @@ export const createAnonymousReport = mutation({
       deviceHash: args.deviceHash, latitude: args.latitude, longitude: args.longitude, accuracyM: args.accuracyM,
       stationId: station?._id, district: station?.district, subcounty: station?.subcounty, parish: station?.parish,
       verified: false, createdAt: now, updatedAt: now,
+      priority: defaultPriority(args.category),
+      referenceNumber: await nextReferenceNumber(ctx, station?.district, now),
     });
     for (const item of args.media) await ctx.db.insert("reportMedia", { reportId, storageId: item.storageId, kind: item.kind, createdAt: now });
     await ctx.db.insert("reportUpdates", { reportId, toStatus: "received", note: "Report submitted", createdAt: now });
@@ -176,8 +197,17 @@ export const officerFeed = query({
       const { deviceHash: _deviceHash, followUpTokenHash: _tokenHash, ...safe } = row;
       const mediaItems = await ctx.db.query("reportMedia").withIndex("by_report_created", q => q.eq("reportId", row._id)).collect();
       const noteItems = await ctx.db.query("reportNotes").withIndex("by_report_created", q => q.eq("reportId", row._id)).order("asc").collect();
+      // Occurrence log: every status change with the acting officer's name and badge.
+      const updateItems = await ctx.db.query("reportUpdates").withIndex("by_report_created", q => q.eq("reportId", row._id)).order("asc").take(30);
+      const log = await Promise.all(updateItems.map(async u => {
+        const actor = u.actorId ? await ctx.db.get(u.actorId) : null;
+        return { _id: u._id, toStatus: u.toStatus, note: u.note, createdAt: u.createdAt, actor: actor ? `${actor.displayName}${actor.badgeNumber ? ` (${actor.badgeNumber})` : ""}` : "System" };
+      }));
+      const assigned = row.assignedOfficerId ? await ctx.db.get(row.assignedOfficerId) : null;
       return {
         ...safe,
+        log,
+        assignedOfficer: assigned ? `${assigned.displayName}${assigned.badgeNumber ? ` (${assigned.badgeNumber})` : ""}` : null,
         media: await Promise.all(mediaItems.map(async m => ({ _id: m._id, kind: m.kind, url: await ctx.storage.getUrl(m.storageId) }))),
         notes: await Promise.all(noteItems.map(async n => ({ _id: n._id, author: n.author, body: n.body, createdAt: n.createdAt, url: n.storageId ? await ctx.storage.getUrl(n.storageId) : null }))),
       };
@@ -186,13 +216,28 @@ export const officerFeed = query({
 });
 
 export const officerAction = mutation({
-  args: { reportId: v.id("reports"), action: v.union(v.literal("verify"), v.literal("assign_me"), v.literal("en_route"), v.literal("close"), v.literal("duplicate"), v.literal("false")), officerId: v.optional(v.id("userProfiles")) },
+  args: {
+    reportId: v.id("reports"),
+    action: v.union(v.literal("verify"), v.literal("assign_me"), v.literal("en_route"), v.literal("close"), v.literal("duplicate"), v.literal("false"), v.literal("set_priority")),
+    officerId: v.optional(v.id("userProfiles")),
+    reason: v.optional(v.string()),
+    priority: v.optional(v.union(v.literal("p1"), v.literal("p2"), v.literal("p3"), v.literal("p4"))),
+  },
   handler: async (ctx, args) => {
     const actor = await requireOfficer(ctx);
     const report = await ctx.db.get(args.reportId);
     if (!report) throw new ConvexError("Report not found.");
     if (actor.role !== "admin" && actor.role !== "super_admin" && report.district !== actor.district) throw new ConvexError("Report is outside your district.");
     const now = Date.now();
+    const reason = args.reason?.trim().slice(0, 500);
+    if (["close", "duplicate", "false"].includes(args.action) && !reason) throw new ConvexError("A reason is required to close or reject an incident.");
+    if (args.action === "set_priority") {
+      if (!args.priority) throw new ConvexError("Choose a priority.");
+      await ctx.db.patch(report._id, { priority: args.priority, updatedAt: now, firstResponseAt: report.firstResponseAt ?? now });
+      await ctx.db.insert("reportUpdates", { reportId: report._id, actorId: actor._id, fromStatus: report.status, toStatus: report.status, note: `Priority set to ${args.priority.toUpperCase()}${reason ? ` — ${reason}` : ""}`, createdAt: now });
+      await ctx.db.insert("auditLogs", { actorId: actor._id, action: "report.set_priority", entityType: "report", entityId: report._id, details: args.priority, createdAt: now });
+      return { success: true };
+    }
     const nextStatus = args.action === "en_route" ? "en_route" : args.action === "close" ? "closed" : args.action === "duplicate" ? "duplicate" : args.action === "false" ? "false" : args.action === "assign_me" ? "assigned" : args.action === "verify" && report.status === "received" ? "seen" : report.status;
     let assignedOfficerId = report.assignedOfficerId;
     if (args.action === "assign_me") assignedOfficerId = actor._id;
@@ -201,9 +246,15 @@ export const officerAction = mutation({
       if (!target || target.role !== "officer" || target.district !== report.district || target.stationId !== report.stationId) throw new ConvexError("Choose an active officer at this report's station.");
       assignedOfficerId = target._id;
     }
-    await ctx.db.patch(report._id, { status: nextStatus, verified: args.action === "verify" ? true : report.verified, assignedOfficerId, updatedAt: now, ...(nextStatus === "closed" ? { closedAt: now } : {}) });
-    await ctx.db.insert("reportUpdates", { reportId: report._id, actorId: actor._id, fromStatus: report.status, toStatus: nextStatus, note: args.action, createdAt: now });
-    await ctx.db.insert("auditLogs", { actorId: actor._id, action: `report.${args.action}`, entityType: "report", entityId: report._id, createdAt: now });
+    const terminal = ["closed", "duplicate", "false"].includes(nextStatus);
+    await ctx.db.patch(report._id, {
+      status: nextStatus, verified: args.action === "verify" ? true : report.verified, assignedOfficerId, updatedAt: now,
+      firstResponseAt: report.firstResponseAt ?? now,
+      ...(terminal ? { closedAt: now, closeReason: reason } : {}),
+    });
+    const label: Record<string, string> = { verify: "Acknowledged", assign_me: "Taken into ownership", en_route: "Officer dispatched", close: "Closed", duplicate: "Closed as duplicate", false: "Rejected as unfounded" };
+    await ctx.db.insert("reportUpdates", { reportId: report._id, actorId: actor._id, fromStatus: report.status, toStatus: nextStatus, note: `${label[args.action]}${reason ? ` — ${reason}` : ""}`, createdAt: now });
+    await ctx.db.insert("auditLogs", { actorId: actor._id, action: `report.${args.action}`, entityType: "report", entityId: report._id, details: reason, createdAt: now });
     return { success: true };
   },
 });

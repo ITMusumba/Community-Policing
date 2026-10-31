@@ -60,8 +60,14 @@ export default defineSchema({
     updatedAt: v.number(),
     closedAt: v.optional(v.number()),
     incidentClusterId: v.optional(v.id("reports")),
+    // Professional-standard fields (optional so existing demo rows stay valid).
+    referenceNumber: v.optional(v.string()),
+    priority: v.optional(v.union(v.literal("p1"), v.literal("p2"), v.literal("p3"), v.literal("p4"))),
+    firstResponseAt: v.optional(v.number()),
+    closeReason: v.optional(v.string()),
   })
     .index("by_tracking_code", ["trackingCode"])
+    .index("by_reference_number", ["referenceNumber"])
     .index("by_device_created", ["deviceHash", "createdAt"])
     .index("by_created_at", ["createdAt"])
     .index("by_reporter", ["reporterId"])
@@ -172,6 +178,9 @@ export default defineSchema({
     key: v.string(),
     createdAt: v.number(),
   }).index("by_key_created", ["key", "createdAt"]),
+
+  // Sequence counters for formal incident reference numbers, e.g. key "KAM/2026".
+  counters: defineTable({ key: v.string(), value: v.number() }).index("by_key", ["key"]),
 
   auditLogs: defineTable({
     actorId: v.optional(v.id("userProfiles")),
