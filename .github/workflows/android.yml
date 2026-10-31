@@ -1,0 +1,37 @@
+name: Android APK
+
+# Builds a debug APK on every push to main (and on demand from the Actions tab).
+# Download it from the run's "Artifacts" section.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # The app loads the live site, so web deploys reach installed apps without a new APK.
+      CAP_SERVER_URL: https://community-policing-nine.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci --no-audit --no-fund
+      - name: Placeholder web assets (the app loads the live site)
+        run: mkdir -p out && [ -f out/index.html ] || echo '<html><body>Loading Community Policing...</body></html>' > out/index.html
+      - run: npx cap sync android
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CommunityPolicing-debug-${{ github.run_number }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
