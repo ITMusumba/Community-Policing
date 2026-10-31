@@ -12,7 +12,8 @@ const categories = [
 ] as const;
 type Category = typeof categories[number][1];
 type MediaItem = { storageId: string; kind: "photo" | "video" | "voice" };
-type Pending = { deviceHash: string; category: Category; latitude?: number; longitude?: number; accuracyM?: number; fallbackStationId?: string; media: MediaItem[] };
+// A queued report keeps its compressed photos/video/voice as Blobs on the phone until it can be uploaded.
+type Pending = { deviceHash: string; category: Category; latitude?: number; longitude?: number; accuracyM?: number; fallbackStationId?: string; blobs: { blob: Blob; kind: MediaItem["kind"] }[] };
 
 function openQueue(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -78,34 +79,38 @@ export default function QuickReport() {
     if (!response.ok) throw new Error("Upload failed");
     return { storageId: (await response.json()).storageId as string, kind };
   }
-  async function submit(payload?: Pending) {
+  async function sendPending(pending: Pending) {
+    const media: MediaItem[] = [];
+    for (const item of pending.blobs ?? []) media.push(await upload(item.blob, item.kind));
+    const { blobs: _blobs, ...rest } = pending;
+    const created = await createReport({ ...rest, media } as Parameters<typeof createReport>[0]);
+    localStorage.setItem(`cp-track-${created.trackingCode}`, created.token);
+    return created;
+  }
+  async function submit() {
     setSending(true); setError(""); setWaiting(false);
+    let pending: Pending | null = null;
     try {
-      let pending = payload;
-      if (!pending) {
-        const uploaded: MediaItem[] = [];
-        for (const file of files) uploaded.push(await upload(file.type.startsWith("image/") ? await compressImage(file) : file, file.type.startsWith("video/") ? "video" : "photo"));
-        if (voice) uploaded.push(await upload(voice, "voice"));
-        pending = { deviceHash: await hashDeviceId(), category, latitude: position?.latitude, longitude: position?.longitude, accuracyM: position?.accuracyM, fallbackStationId: stationId || undefined, media: uploaded };
-      }
+      // Compression is local, so it works offline; the result is what gets queued.
+      const blobs: Pending["blobs"] = [];
+      for (const file of files) blobs.push({ blob: file.type.startsWith("image/") ? await compressImage(file) : file, kind: file.type.startsWith("video/") ? "video" : "photo" });
+      if (voice) blobs.push({ blob: voice, kind: "voice" });
+      pending = { deviceHash: await hashDeviceId(), category, latitude: position?.latitude, longitude: position?.longitude, accuracyM: position?.accuracyM, fallbackStationId: stationId || undefined, blobs };
       if (!navigator.onLine) { await queueReport(pending); setWaiting(true); return; }
-      const created = await createReport(pending as Parameters<typeof createReport>[0]);
-      localStorage.setItem(`cp-track-${created.trackingCode}`, created.token);
+      const created = await sendPending(pending);
       setResult(created);
       window.history.replaceState({}, "", `/track?code=${encodeURIComponent(created.trackingCode)}`);
       window.speechSynthesis?.speak(new SpeechSynthesisUtterance(created.trackingCode.split("").join(" ")));
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not send";
-      if (!navigator.onLine || /network|fetch|upload failed/i.test(message)) {
-        try {
-          const pending: Pending = { deviceHash: await hashDeviceId(), category, latitude: position?.latitude, longitude: position?.longitude, accuracyM: position?.accuracyM, fallbackStationId: stationId || undefined, media: [] };
-          await queueReport(pending); setWaiting(true);
-        } catch { setError(message); }
+      if (pending && (!navigator.onLine || /network|fetch|upload failed|connection/i.test(message))) {
+        try { await queueReport(pending); setWaiting(true); } catch { setError(message); }
       } else setError(message);
     } finally { setSending(false); }
   }
   useEffect(() => {
     const retry = async () => {
+      if (!navigator.onLine) return;
       try {
         const db = await openQueue();
         const items = await new Promise<{ key: IDBValidKey; value: Pending }[]>((resolve, reject) => {
@@ -116,16 +121,18 @@ export default function QuickReport() {
         });
         for (const item of items) {
           try {
-            const created = await createReport(item.value as Parameters<typeof createReport>[0]);
-            localStorage.setItem(`cp-track-${created.trackingCode}`, created.token);
+            const created = await sendPending(item.value);
+            setWaiting(false); setResult(created); // show the tracking code once the queued report is sent
             await new Promise<void>((resolve, reject) => { const request = db.transaction("reports", "readwrite").objectStore("reports").delete(item.key); request.onsuccess = () => resolve(); request.onerror = () => reject(request.error); });
           } catch { break; }
         }
       } catch { /* queue remains for next online event */ }
     };
+    void retry(); // also send anything left from an earlier session when the app is reopened
     window.addEventListener("online", retry);
     return () => window.removeEventListener("online", retry);
-  }, [createReport]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createReport, generateUploadUrl]);
 
   async function toggleVoice() {
     if (recording) { recorder.current?.stop(); setRecording(false); return; }
