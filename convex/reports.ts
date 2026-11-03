@@ -66,8 +66,9 @@ type Priority = "p1" | "p2" | "p3" | "p4";
 // Initial triage by category; officers can re-prioritise. Targets are minutes to first response.
 export const PRIORITY_TARGET_MIN: Record<Priority, number> = { p1: 30, p2: 120, p3: 1440, p4: 4320 };
 function defaultPriority(category: string): Priority {
-  if (["robbery", "assault", "sexual_violence", "child_abuse", "fire", "arson", "accident", "terrorism"].includes(category)) return "p1";
-  if (["domestic_violence", "theft", "livestock_theft", "crop_theft", "drugs"].includes(category)) return "p2";
+  // Crop (coffee) and livestock theft are P1: thieves must be intercepted before the goods are moved/sold.
+  if (["robbery", "assault", "sexual_violence", "child_abuse", "livestock_theft", "crop_theft", "fire", "arson", "accident", "terrorism"].includes(category)) return "p1";
+  if (["domestic_violence", "theft", "drugs"].includes(category)) return "p2";
   if (category === "suspicious_activity") return "p3";
   return "p4";
 }
