@@ -7,7 +7,8 @@ const crimeCategory = v.union(
   v.literal("domestic_violence"), v.literal("sexual_violence"),
   v.literal("accident"), v.literal("fire"), v.literal("drugs"),
   v.literal("suspicious_activity"), v.literal("livestock_theft"),
-  v.literal("land_property_dispute"), v.literal("arson"), v.literal("illegal_dumping"), v.literal("terrorism"), v.literal("other")
+  v.literal("land_property_dispute"), v.literal("arson"), v.literal("illegal_dumping"), v.literal("terrorism"), v.literal("other"),
+  v.literal("crop_theft"), v.literal("child_abuse")
 );
 const reportStatus = v.union(
   v.literal("received"), v.literal("seen"), v.literal("assigned"),

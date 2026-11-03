@@ -11,7 +11,7 @@ import IncidentMap from "@/components/IncidentMap";
 import { errorMessage } from "@/lib/errors";
 import { CATEGORY_LABEL, PRIORITY, STATUS_LABEL, elapsed, responseState, type Priority } from "@/lib/police";
 
-const cats = ["theft","robbery","assault","domestic_violence","sexual_violence","accident","fire","drugs","suspicious_activity","livestock_theft","land_property_dispute","arson","illegal_dumping","terrorism","other"] as const;
+const cats = ["theft","robbery","assault","domestic_violence","child_abuse","sexual_violence","accident","fire","drugs","suspicious_activity","livestock_theft","crop_theft","land_property_dispute","arson","illegal_dumping","terrorism","other"] as const;
 const statuses = ["received","seen","assigned","en_route","closed","duplicate","false"] as const;
 type Outcome = "close" | "duplicate" | "false";
 const OUTCOMES: Record<Outcome, { title: string; reasons: string[] }> = {

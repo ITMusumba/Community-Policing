@@ -8,7 +8,8 @@ const category = v.union(
   v.literal("theft"), v.literal("robbery"), v.literal("assault"), v.literal("domestic_violence"),
   v.literal("sexual_violence"), v.literal("accident"), v.literal("fire"), v.literal("drugs"),
   v.literal("suspicious_activity"), v.literal("livestock_theft"), v.literal("land_property_dispute"),
-  v.literal("arson"), v.literal("illegal_dumping"), v.literal("terrorism"), v.literal("other")
+  v.literal("arson"), v.literal("illegal_dumping"), v.literal("terrorism"), v.literal("other"),
+  v.literal("crop_theft"), v.literal("child_abuse")
 );
 const status = v.union(
   v.literal("received"), v.literal("seen"), v.literal("assigned"), v.literal("en_route"),
@@ -65,8 +66,8 @@ type Priority = "p1" | "p2" | "p3" | "p4";
 // Initial triage by category; officers can re-prioritise. Targets are minutes to first response.
 export const PRIORITY_TARGET_MIN: Record<Priority, number> = { p1: 30, p2: 120, p3: 1440, p4: 4320 };
 function defaultPriority(category: string): Priority {
-  if (["robbery", "assault", "sexual_violence", "fire", "arson", "accident", "terrorism"].includes(category)) return "p1";
-  if (["domestic_violence", "theft", "livestock_theft", "drugs"].includes(category)) return "p2";
+  if (["robbery", "assault", "sexual_violence", "child_abuse", "fire", "arson", "accident", "terrorism"].includes(category)) return "p1";
+  if (["domestic_violence", "theft", "livestock_theft", "crop_theft", "drugs"].includes(category)) return "p2";
   if (category === "suspicious_activity") return "p3";
   return "p4";
 }
