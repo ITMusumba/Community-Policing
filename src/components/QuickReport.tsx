@@ -264,28 +264,29 @@ export default function QuickReport() {
     </>}
 
     {step === 3 && <>
-      <h2 className="mt-6 flex items-center justify-center gap-2 text-center text-2xl font-black">🗣️ {t.describe} <button onClick={() => speak(t.describe)} aria-label="Read aloud" className="text-2xl">🔊</button></h2>
+      <h2 className="mt-4 flex items-center justify-center gap-2 text-center text-2xl font-black">🗣️ {t.describe} <button onClick={() => speak(t.describe)} aria-label="Read aloud" className="text-2xl">🔊</button></h2>
       <div className="mt-3 flex justify-center gap-3 text-sm text-slate-700">
         <span>{files.length ? `📷 ✅ ${files.length}` : "📷 —"}</span><span>{category ? <><CategoryIcon value={category} emoji={categories.find(c => c[1] === category)?.[0] ?? ""} size="sm" /> ✅</> : "❓ —"}</span>
       </div>
       {thumbs}
-      <button onClick={toggleVoice} className={`mt-5 flex min-h-36 w-full flex-col items-center justify-center rounded-[2rem] text-white shadow ${recording ? "bg-red-700" : voice ? "bg-emerald-700" : "bg-[#176b87]"}`}>
-        <span className="text-7xl" aria-hidden="true">{recording ? "⏹️" : voice ? "✅" : "🎙️"}</span>
-        <span className="mt-2 text-xl font-black">{recording ? t.stopRecording : voice ? t.voiceReady : t.voice}</span>
+      {/* Step 3 is kept compact so everything down to Send fits on one phone screen. */}
+      <button onClick={toggleVoice} className={`mt-3 flex min-h-20 w-full items-center justify-center gap-3 rounded-3xl px-4 text-white shadow ${recording ? "bg-red-700" : voice ? "bg-emerald-700" : "bg-[#176b87]"}`}>
+        <span className="text-5xl" aria-hidden="true">{recording ? "⏹️" : voice ? "✅" : "🎙️"}</span>
+        <span className="text-xl font-black">{recording ? t.stopRecording : voice ? t.voiceReady : t.voice}</span>
       </button>
       {voice && !recording && <button onClick={() => { setVoice(null); void toggleVoice(); }} className="mt-2 min-h-11 w-full text-sm font-semibold text-slate-600 underline">🔁 {t.reRecord}</button>}
-      <label className="mt-4 block text-sm font-semibold text-slate-700">✍️ {t.typeHere}
-        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} maxLength={3000} className="mt-1 w-full rounded-xl border-2 border-slate-300 bg-white p-3 text-base" />
+      <label className="mt-3 block text-sm font-semibold text-slate-700">✍️ {t.typeHere}
+        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} maxLength={3000} className="mt-1 w-full rounded-xl border-2 border-slate-300 bg-white p-2.5 text-base" />
       </label>
-      <div className="mt-4 rounded-2xl bg-slate-100 p-4">
+      <div className="mt-2 rounded-2xl bg-slate-100 px-4 py-2.5">
         <p className="font-bold">{position ? `📍 ${t.gpsOk} (±${Math.round(position.accuracyM)} m)` : gpsFailed ? `📍 ${t.gpsFailed}` : `📍 ${t.gpsWaiting}`}</p>
         {gpsFailed && <label className="mt-2 block text-sm">{t.chooseStation}<select value={stationId} onChange={e => setStationId(e.target.value)} className="mt-2 min-h-12 w-full rounded-xl border bg-white p-2"><option value="">—</option>{[...new Set((stations ?? []).map(s => s.district))].sort().map(d => <optgroup key={d} label={d}>{stations?.filter(s => s.district === d).map(s => <option key={s._id} value={s._id}>{s.name}</option>)}</optgroup>)}</select></label>}
       </div>
       {signedInCitizen && <label className="mt-3 flex items-start gap-2 rounded-xl bg-white p-3 text-sm"><input type="checkbox" checked={shareIdentity} onChange={e => setShareIdentity(e.target.checked)} className="mt-1 h-5 w-5" /><span>Share my name and phone with police<span className="block text-xs text-slate-500">Otherwise you stay anonymous. Replies still reach <a href="/citizen" className="underline">My account</a>.</span></span></label>}
-      {(!category || !hasDescription) && <p className="mt-3 rounded-xl border-2 border-amber-400 bg-amber-50 p-3 font-semibold text-amber-900">⚠️ {t.unsupportedWarn}</p>}
+      {(!category || !hasDescription) && <p className="mt-2 rounded-xl border-2 border-amber-400 bg-amber-50 px-3 py-2 text-sm font-semibold leading-snug text-amber-900">⚠️ {t.unsupportedWarn}</p>}
       {waiting && <p className="mt-3 rounded-xl bg-amber-100 p-3 font-bold">🕓 {t.waiting}</p>}
       {error && <p role="alert" className="mt-3 rounded-xl bg-red-100 p-3 text-red-800">{error}</p>}
-      <button disabled={sending || recording || (!position && !stationId)} onClick={() => void submit()} className="mt-5 min-h-16 w-full rounded-2xl bg-[#102a43] text-xl font-black text-white disabled:opacity-50">{sending ? "…" : `📤 ${t.send}`}</button>
+      <button disabled={sending || recording || (!position && !stationId)} onClick={() => void submit()} className="mt-3 min-h-14 w-full rounded-2xl bg-[#102a43] text-xl font-black text-white disabled:opacity-50">{sending ? "…" : `📤 ${t.send}`}</button>
     </>}
 
     <p className="mt-6 text-center text-xs text-slate-500">{t.anonNote}</p>
