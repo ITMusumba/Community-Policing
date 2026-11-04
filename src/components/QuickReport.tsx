@@ -5,6 +5,7 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { errorMessage } from "@/lib/errors";
 import { copy, type Language } from "@/lib/i18n";
+import { compressImage, isNativeApp, onRestoredPhoto, takeNativePhoto } from "@/lib/media";
 
 // Main grid (15 tiles). Less common categories sit behind "See more".
 const mainCategories = [
@@ -24,7 +25,9 @@ function CoffeeBeans({ className = "" }: { className?: string }) {
 }
 function CategoryIcon({ value, emoji, size }: { value: string; emoji: string; size: "lg" | "sm" }) {
   if (value === "crop_theft") return <CoffeeBeans className={size === "lg" ? "h-12 w-12" : "inline h-5 w-5 align-text-bottom"} />;
-  return <span className={size === "lg" ? "text-5xl" : ""} aria-hidden="true">{emoji}</span>;
+  // Arson is two emoji (house + fire); keep them on one line so its tile matches the others.
+  const large = value === "arson" ? "whitespace-nowrap text-4xl" : "text-5xl";
+  return <span className={size === "lg" ? large : "whitespace-nowrap"} aria-hidden="true">{emoji}</span>;
 }
 type Category = typeof categories[number][1];
 type MediaItem = { storageId: string; kind: "photo" | "video" | "voice" };
@@ -51,17 +54,6 @@ async function hashDeviceId() {
   if (!id) { id = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, "0")).join(""); localStorage.setItem("cp-device-id", id); }
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(id));
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
-}
-async function compressImage(file: File): Promise<Blob> {
-  const image = await createImageBitmap(file);
-  const scale = Math.min(1, 1280 / Math.max(image.width, image.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale);
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Image processing unavailable.");
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  image.close();
-  return await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Could not compress photo")), "image/jpeg", 0.7));
 }
 
 export default function QuickReport() {
@@ -91,13 +83,31 @@ export default function QuickReport() {
   const videoInput = useRef<HTMLInputElement>(null);
   const galleryInput = useRef<HTMLInputElement>(null);
   // Photos/videos add up across Photo, Video and Gallery picks; the input is cleared so the same file can be picked again.
-  const pickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(e.target.files ?? []);
-    e.target.value = "";
+  const addFiles = (picked: File[]) => {
     if (!picked.length) return;
     setFiles(old => [...old, ...picked].slice(0, 8));
     setStep(2);
   };
+  const pickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    addFiles(picked);
+  };
+  // In the installed app the Photo button uses the native camera; browsers keep the <input capture> route.
+  async function takePhoto() {
+    if (!isNativeApp()) { fileInput.current?.click(); return; }
+    try { const photo = await takeNativePhoto(); if (photo) addFiles([photo]); }
+    catch (e) { setError(errorMessage(e, "Could not open the camera.")); }
+  }
+  // A photo taken just before Android closed the app comes back here when it reopens.
+  useEffect(() => onRestoredPhoto(photo => addFiles([photo])), []);
+  // Thumbnails so people can see what is attached.
+  const [previews, setPreviews] = useState<string[]>([]);
+  useEffect(() => {
+    const urls = files.map(f => f.type.startsWith("image/") || f.type.startsWith("video/") ? URL.createObjectURL(f) : "");
+    setPreviews(urls);
+    return () => urls.forEach(u => u && URL.revokeObjectURL(u));
+  }, [files]);
   const recorder = useRef<MediaRecorder | null>(null);
   const t = copy[language];
 
@@ -196,6 +206,10 @@ export default function QuickReport() {
   // One Skip style on every step.
   const SkipButton = ({ onClick }: { onClick: () => void }) => <button onClick={onClick} className="mt-4 min-h-14 w-full rounded-2xl border-2 border-[#176b87] bg-white text-lg font-bold text-[#176b87] hover:bg-cyan-50">{t.skip} →</button>;
   const hasDescription = Boolean(description.trim() || voice);
+  const thumbs = files.length ? <div className="mt-3 flex flex-wrap justify-center gap-2">{files.map((f, i) => <div key={i} className="relative h-20 w-20 overflow-hidden rounded-xl border-2 border-white bg-slate-200 shadow">
+    {f.type.startsWith("video/") ? <video src={previews[i]} muted playsInline className="h-full w-full object-cover" /> : previews[i] ? <img src={previews[i]} alt={`Attachment ${i + 1}`} className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-2xl">📎</span>}
+    <button onClick={() => setFiles(old => old.filter((_, j) => j !== i))} aria-label={`Remove attachment ${i + 1}`} className="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs font-bold text-white">✕</button>
+  </div>)}</div> : null;
   const Dots = () => <div className="flex items-center gap-2" aria-label={`Step ${step} of 3`}>{[1, 2, 3].map(n => <span key={n} className={`h-2.5 w-8 rounded-full ${n <= step ? "bg-[#176b87]" : "bg-slate-300"}`} />)}</div>;
   const header = <div className="flex items-center justify-between gap-3">
     {step > 1 ? <button onClick={() => setStep(step === 3 ? 2 : 1)} className="min-h-12 rounded-xl bg-[#176b87] px-4 text-lg font-bold text-white shadow hover:bg-[#125670]" aria-label="Back">←</button> : <span aria-hidden="true" />}
@@ -218,7 +232,7 @@ export default function QuickReport() {
       <div className="mt-5 rounded-[2rem] bg-[#176b87] p-4 text-white shadow-lg">
         <p className="text-center text-2xl font-black">{t.report}</p>
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <button onClick={() => fileInput.current?.click()} className="flex min-h-48 flex-col items-center justify-center rounded-3xl bg-white/15 hover:bg-white/25">
+          <button onClick={() => void takePhoto()} className="flex min-h-48 flex-col items-center justify-center rounded-3xl bg-white/15 hover:bg-white/25">
             <span className="text-7xl" aria-hidden="true">📷</span><span className="mt-2 text-xl font-black">{t.photo}</span>
           </button>
           <button onClick={() => videoInput.current?.click()} className="flex min-h-48 flex-col items-center justify-center rounded-3xl bg-white/15 hover:bg-white/25">
@@ -227,6 +241,7 @@ export default function QuickReport() {
         </div>
         <button onClick={() => galleryInput.current?.click()} className="mt-3 w-full text-center text-sm underline">🖼️ {t.gallery}</button>
       </div>
+      {thumbs}
       {files.length > 0 && <button onClick={() => setStep(2)} className="mt-3 min-h-14 w-full rounded-xl bg-emerald-700 text-lg font-bold text-white">✅ {files.length} 📎 → </button>}
       <SkipButton onClick={() => setStep(2)} />
     </>}
@@ -253,6 +268,7 @@ export default function QuickReport() {
       <div className="mt-3 flex justify-center gap-3 text-sm text-slate-700">
         <span>{files.length ? `📷 ✅ ${files.length}` : "📷 —"}</span><span>{category ? <><CategoryIcon value={category} emoji={categories.find(c => c[1] === category)?.[0] ?? ""} size="sm" /> ✅</> : "❓ —"}</span>
       </div>
+      {thumbs}
       <button onClick={toggleVoice} className={`mt-5 flex min-h-36 w-full flex-col items-center justify-center rounded-[2rem] text-white shadow ${recording ? "bg-red-700" : voice ? "bg-emerald-700" : "bg-[#176b87]"}`}>
         <span className="text-7xl" aria-hidden="true">{recording ? "⏹️" : voice ? "✅" : "🎙️"}</span>
         <span className="mt-2 text-xl font-black">{recording ? t.stopRecording : voice ? t.voiceReady : t.voice}</span>

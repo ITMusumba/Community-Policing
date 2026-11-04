@@ -31,11 +31,11 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ConvexClientProvider>{children}</ConvexClientProvider>
+        <InstallApp />
         <footer className="px-4 pb-6 pt-2 text-center text-xs text-slate-500">
           <p className="font-semibold uppercase tracking-wider">Community Policing</p>
           <p className="mt-0.5">Keeping Ourselves and Our Communities Safe</p>
         </footer>
-        <InstallApp />
       </body>
     </html>
   );

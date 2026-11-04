@@ -8,7 +8,7 @@ type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<
 const APK_URL = process.env.NEXT_PUBLIC_APK_URL;
 
 /**
- * Small "Get the app" pill on every page. Uses the browser install prompt where available,
+ * Small "Get the app" pill at the foot of every page (in the page flow, so it never covers buttons or tiles). Uses the browser install prompt where available,
  * otherwise shows Add-to-Home-screen steps. Hidden only inside the installed app; "Not now" just closes the steps.
  */
 export default function InstallApp() {
@@ -44,7 +44,7 @@ export default function InstallApp() {
     setHelp(h => !h);
   }
 
-  return <div className="fixed bottom-3 right-3 z-50 flex flex-col items-end gap-2 print:hidden" style={{ marginBottom: "env(safe-area-inset-bottom)" }}>
+  return <div className="flex flex-col items-center gap-2 px-4 pt-2 print:hidden">
     {help && <div role="dialog" aria-label="Install COMPOLI" className="w-64 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-lg">
       <p className="font-semibold text-[#102a43]">Add COMPOLI to your home screen</p>
       {ios

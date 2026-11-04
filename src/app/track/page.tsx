@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { errorMessage } from "@/lib/errors";
 import { api } from "@/convex/_generated/api";
+import { compressImage, isNativeApp, onRestoredPhoto, takeNativePhoto } from "@/lib/media";
 
 const statusIcon: Record<string, string> = { received: "📥", seen: "👁️", assigned: "👮", en_route: "🚓", closed: "✅", duplicate: "🧩", false: "⚠️" };
 
@@ -17,6 +18,14 @@ export default function TrackPage() {
   const uploadUrl = useMutation(api.reports.generateUploadUrl);
   useEffect(() => { const value = new URLSearchParams(window.location.search).get("code") || ""; const normalized = value.toUpperCase(); setCode(normalized); if (normalized) setToken(localStorage.getItem(`cp-track-${normalized}`) || ""); }, []);
   const data = useQuery(api.reports.trackAnonymous, code && token ? { code, token } : "skip");
+  useEffect(() => onRestoredPhoto(setFile), []);
+  // In the installed app, use the native camera; the browser keeps the <input capture> route.
+  async function takePhoto(e: React.MouseEvent) {
+    if (!isNativeApp()) return;
+    e.preventDefault();
+    try { const photo = await takeNativePhoto(); if (photo) setFile(photo); }
+    catch (err) { setError(errorMessage(err, "Could not open the camera.")); }
+  }
 
   async function send() {
     setError("");
@@ -25,7 +34,9 @@ export default function TrackPage() {
       let kind: "photo" | "voice" | undefined;
       if (file) {
         const url = await uploadUrl({ code, token });
-        const response = await fetch(url, { method: "POST", headers: { "Content-Type": file.type }, body: file });
+        // Shrink photos first: full-size camera photos can exceed the server's 10 MB limit.
+        const blob = file.type.startsWith("image/") ? await compressImage(file) : file;
+        const response = await fetch(url, { method: "POST", headers: { "Content-Type": blob.type || file.type }, body: blob });
         if (!response.ok) throw new Error("Upload failed");
         storageId = (await response.json()).storageId;
         kind = file.type.startsWith("audio/") ? "voice" : "photo";
@@ -48,7 +59,7 @@ export default function TrackPage() {
     <textarea value={body} onChange={e => setBody(e.target.value)} rows={3} placeholder="Add details or a message (optional)" className="mt-3 w-full rounded-xl border bg-white p-3" />
     {/* Visible buttons for the hidden file inputs; the bare browser "Choose file" control was easy to miss. */}
     <div className="mt-2 grid grid-cols-2 gap-2">
-      <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white font-semibold">📷 Add photo
+      <label onClick={e => void takePhoto(e)} className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white font-semibold">📷 Add photo
         <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={e => { setFile(e.target.files?.[0] || null); e.target.value = ""; }} /></label>
       <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white font-semibold">🖼️ From gallery
         <input type="file" accept="image/*,audio/*" className="sr-only" onChange={e => { setFile(e.target.files?.[0] || null); e.target.value = ""; }} /></label>

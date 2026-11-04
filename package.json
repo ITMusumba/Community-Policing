@@ -16,6 +16,8 @@
   "dependencies": {
     "@auth/core": "0.41.1",
     "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/camera": "^7.0.5",
     "@capacitor/core": "^7.4.3",
     "@capacitor/ios": "^7.4.3",
     "@convex-dev/auth": "^0.0.96",
