@@ -2,14 +2,8 @@ import { defineSchema, defineTable } from "convex/server";
 import { authTables } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-const crimeCategory = v.union(
-  v.literal("theft"), v.literal("robbery"), v.literal("assault"),
-  v.literal("domestic_violence"), v.literal("sexual_violence"),
-  v.literal("accident"), v.literal("fire"), v.literal("drugs"),
-  v.literal("suspicious_activity"), v.literal("livestock_theft"),
-  v.literal("land_property_dispute"), v.literal("arson"), v.literal("illegal_dumping"), v.literal("terrorism"), v.literal("other"),
-  v.literal("crop_theft"), v.literal("child_abuse")
-);
+// Category keys are built in (convex/lib/categories.ts) or added by an admin (crimeCategories table).
+const crimeCategory = v.string();
 const reportStatus = v.union(
   v.literal("received"), v.literal("seen"), v.literal("assigned"),
   v.literal("en_route"), v.literal("closed"), v.literal("duplicate"),
@@ -87,6 +81,21 @@ export default defineSchema({
     .index("by_station_created", ["stationId", "createdAt"])
     .index("by_status_created", ["status", "createdAt"])
     .index("by_assigned_officer", ["assignedOfficerId"]),
+
+  // Categories an admin added, and admin changes to built-in ones (same key). See convex/lib/categories.ts.
+  crimeCategories: defineTable({
+    key: v.string(),
+    label: v.string(),
+    emoji: v.string(),
+    group: v.union(v.literal("environment"), v.literal("general")),
+    priority: v.union(v.literal("p1"), v.literal("p2"), v.literal("p3"), v.literal("p4")),
+    main: v.boolean(),
+    active: v.boolean(),
+    order: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    createdBy: v.optional(v.id("userProfiles")),
+  }).index("by_key", ["key"]),
 
   reportMedia: defineTable({
     reportId: v.id("reports"),

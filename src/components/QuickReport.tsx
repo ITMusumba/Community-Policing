@@ -5,31 +5,10 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { errorMessage } from "@/lib/errors";
 import { copy, type Language } from "@/lib/i18n";
+import { CategoryIcon, useCategories } from "@/lib/categories";
 import { compressImage, isNativeApp, onRestoredPhoto, takeNativePhoto } from "@/lib/media";
 
-// Main grid (15 tiles). Less common categories sit behind "See more".
-const mainCategories = [
-  ["🥷", "theft"], ["🔪", "robbery"], ["🤕", "assault"], ["🏠", "domestic_violence"],
-  ["🚸", "child_abuse"], ["🚗", "accident"], ["", "crop_theft"], ["💊", "drugs"],
-  ["👁️", "suspicious_activity"], ["🐄", "livestock_theft"], ["🏡", "land_property_dispute"], ["🏠🔥", "arson"],
-  ["🚯", "illegal_dumping"], ["💣", "terrorism"], ["❔", "other"],
-] as const;
-const moreCategories = [["🛑", "sexual_violence"], ["🔥", "fire"]] as const;
-const categories = [...mainCategories, ...moreCategories] as const;
-// There is no coffee-bean emoji, so crop theft uses a small drawn icon.
-function CoffeeBeans({ className = "" }: { className?: string }) {
-  return <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-    <g transform="rotate(-28 22 34)"><ellipse cx="22" cy="34" rx="13" ry="18" fill="#7b4a2a" /><path d="M22 17c-6 8 6 18 0 34" stroke="#3e2314" strokeWidth="3" fill="none" strokeLinecap="round" /></g>
-    <g transform="rotate(24 43 30)"><ellipse cx="43" cy="30" rx="13" ry="18" fill="#9a5d36" /><path d="M43 13c-6 8 6 18 0 34" stroke="#4a2a17" strokeWidth="3" fill="none" strokeLinecap="round" /></g>
-  </svg>;
-}
-function CategoryIcon({ value, emoji, size }: { value: string; emoji: string; size: "lg" | "sm" }) {
-  if (value === "crop_theft") return <CoffeeBeans className={size === "lg" ? "h-12 w-12" : "inline h-5 w-5 align-text-bottom"} />;
-  // Arson is two emoji (house + fire); keep them on one line so its tile matches the others.
-  const large = value === "arson" ? "whitespace-nowrap text-4xl" : "text-5xl";
-  return <span className={size === "lg" ? large : "whitespace-nowrap"} aria-hidden="true">{emoji}</span>;
-}
-type Category = typeof categories[number][1];
+type Category = string;
 type MediaItem = { storageId: string; kind: "photo" | "video" | "voice" };
 // A queued report keeps its compressed photos/video/voice as Blobs on the phone until it can be uploaded.
 type Pending = { deviceHash: string; category?: Category; description?: string; latitude?: number; longitude?: number; accuracyM?: number; fallbackStationId?: string; shareIdentity?: boolean; blobs: { blob: Blob; kind: MediaItem["kind"] }[] };
@@ -110,6 +89,7 @@ export default function QuickReport() {
   }, [files]);
   const recorder = useRef<MediaRecorder | null>(null);
   const t = copy[language];
+  const cats = useCategories();
 
   useEffect(() => {
     if (!navigator.geolocation) { setGpsFailed(true); return; }
@@ -196,12 +176,6 @@ export default function QuickReport() {
   </main>;
 
 
-  const CAT_LABEL: Record<Category, string> = {
-    theft: "Theft", robbery: "Robbery", assault: "Assault", domestic_violence: "Home violence", sexual_violence: "Sexual assault",
-    child_abuse: "Child abuse", crop_theft: "Crop theft",
-    accident: "Traffic accident", fire: "Fire", drugs: "Drugs", suspicious_activity: "Suspicious", livestock_theft: "Animal theft",
-    land_property_dispute: "Land", arson: "Arson", illegal_dumping: "Dumping", terrorism: "Terrorism", other: "Other",
-  };
   const speak = (text: string) => { try { window.speechSynthesis?.cancel(); window.speechSynthesis?.speak(new SpeechSynthesisUtterance(text)); } catch { /* no speech */ } };
   // One Skip style on every step.
   const SkipButton = ({ onClick }: { onClick: () => void }) => <button onClick={onClick} className="mt-4 min-h-14 w-full rounded-2xl border-2 border-[#176b87] bg-white text-lg font-bold text-[#176b87] hover:bg-cyan-50">{t.skip} →</button>;
@@ -249,15 +223,15 @@ export default function QuickReport() {
     {step === 2 && <>
       <h2 className="mt-6 flex items-center justify-center gap-2 text-center text-2xl font-black">❓ {t.whatHappened} <button onClick={() => speak(t.whatHappened)} aria-label="Read aloud" className="text-2xl">🔊</button></h2>
       {(() => {
-        const tile = ([emoji, value]: readonly [string, Category]) => <button key={value} aria-pressed={category === value}
-          onClick={() => { setCategory(value); speak(CAT_LABEL[value]); setStep(3); }}
-          className={`flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 bg-white ${category === value ? "border-[#176b87] ring-4 ring-cyan-200" : "border-slate-300"}`}>
-          <CategoryIcon value={value} emoji={emoji} size="lg" /><span className="mt-1 text-xs font-semibold text-slate-700">{CAT_LABEL[value]}</span></button>;
-        const moreOpen = showMore || moreCategories.some(c => c[1] === category);
+        const tile = (c: (typeof cats.all)[number]) => <button key={c.key} aria-pressed={category === c.key}
+          onClick={() => { setCategory(c.key); speak(c.label); setStep(3); }}
+          className={`flex min-h-24 flex-col items-center justify-center rounded-2xl border-2 px-1 ${c.group === "environment" ? "bg-emerald-50" : "bg-white"} ${category === c.key ? "border-[#176b87] ring-4 ring-cyan-200" : c.group === "environment" ? "border-emerald-300" : "border-slate-300"}`}>
+          <CategoryIcon cat={c} size="lg" /><span className="mt-1 text-center text-xs font-semibold leading-tight text-slate-700">{c.label}</span></button>;
+        const moreOpen = showMore || cats.more.some(c => c.key === category);
         return <>
-          <div className="mt-5 grid grid-cols-3 gap-3">{mainCategories.map(tile)}</div>
+          <div className="mt-5 grid grid-cols-3 gap-3">{cats.main.map(tile)}</div>
           <button onClick={() => setShowMore(!moreOpen)} aria-expanded={moreOpen} className="mt-3 min-h-12 w-full rounded-xl bg-slate-200 text-base font-bold text-[#102a43]">{moreOpen ? `▲ ${t.seeLess}` : `▼ ${t.seeMore}`}</button>
-          {moreOpen && <div className="mt-3 grid grid-cols-3 gap-3">{moreCategories.map(tile)}</div>}
+          {moreOpen && <div className="mt-3 grid grid-cols-3 gap-3">{cats.more.map(tile)}</div>}
         </>;
       })()}
       <SkipButton onClick={() => { setCategory(null); setStep(3); }} />
@@ -266,7 +240,7 @@ export default function QuickReport() {
     {step === 3 && <>
       <h2 className="mt-4 flex items-center justify-center gap-2 text-center text-2xl font-black">🗣️ {t.describe} <button onClick={() => speak(t.describe)} aria-label="Read aloud" className="text-2xl">🔊</button></h2>
       <div className="mt-3 flex justify-center gap-3 text-sm text-slate-700">
-        <span>{files.length ? `📷 ✅ ${files.length}` : "📷 —"}</span><span>{category ? <><CategoryIcon value={category} emoji={categories.find(c => c[1] === category)?.[0] ?? ""} size="sm" /> ✅</> : "❓ —"}</span>
+        <span>{files.length ? `📷 ✅ ${files.length}` : "📷 —"}</span><span>{category ? <><CategoryIcon cat={cats.byKey.get(category)} size="sm" /> ✅</> : "❓ —"}</span>
       </div>
       {thumbs}
       {/* Step 3 is kept compact so everything down to Send fits on one phone screen. */}

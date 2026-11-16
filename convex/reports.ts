@@ -3,14 +3,10 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireOfficer } from "./lib/auth";
 import { distanceKm, locatePoint } from "./lib/geo";
+import { allCategories } from "./categories";
 
-const category = v.union(
-  v.literal("theft"), v.literal("robbery"), v.literal("assault"), v.literal("domestic_violence"),
-  v.literal("sexual_violence"), v.literal("accident"), v.literal("fire"), v.literal("drugs"),
-  v.literal("suspicious_activity"), v.literal("livestock_theft"), v.literal("land_property_dispute"),
-  v.literal("arson"), v.literal("illegal_dumping"), v.literal("terrorism"), v.literal("other"),
-  v.literal("crop_theft"), v.literal("child_abuse")
-);
+// Checked against the built-in and admin-added categories when a report is created.
+const category = v.string();
 const status = v.union(
   v.literal("received"), v.literal("seen"), v.literal("assigned"), v.literal("en_route"),
   v.literal("closed"), v.literal("duplicate"), v.literal("false")
@@ -65,13 +61,6 @@ async function validateMedia(ctx: any, storageId: any, kind: keyof typeof MEDIA_
 type Priority = "p1" | "p2" | "p3" | "p4";
 // Initial triage by category; officers can re-prioritise. Targets are minutes to first response.
 export const PRIORITY_TARGET_MIN: Record<Priority, number> = { p1: 30, p2: 120, p3: 1440, p4: 4320 };
-function defaultPriority(category: string): Priority {
-  // Crop (coffee) and livestock theft are P1: thieves must be intercepted before the goods are moved/sold.
-  if (["robbery", "assault", "sexual_violence", "child_abuse", "livestock_theft", "crop_theft", "fire", "arson", "accident", "terrorism"].includes(category)) return "p1";
-  if (["domestic_violence", "theft", "drugs"].includes(category)) return "p2";
-  if (category === "suspicious_activity") return "p3";
-  return "p4";
-}
 // Formal reference: CP/<DISTRICT CODE>/<YEAR>/<6-digit sequence>, e.g. CP/KAM/2026/000123.
 async function nextReferenceNumber(ctx: MutationCtx, district: string | undefined, now: number) {
   const code = (district ?? "UNK").replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() || "UNK";
@@ -134,14 +123,16 @@ export const createAnonymousReport = mutation({
     const missing: string[] = [];
     if (!args.category) missing.push("no incident type selected");
     if (!description && !args.media.some(m => m.kind === "voice")) missing.push("no voice or text description");
-    const category = args.category ?? "other";
+    // An unknown type (for example one removed while the report waited offline) is filed under "Other".
+    const known = args.category ? (await allCategories(ctx)).find(c => c.key === args.category) : undefined;
+    const category = known?.key ?? "other";
     const reportId = await ctx.db.insert("reports", {
       category, description, supportNote: missing.length ? `Unsupported — ${missing.join("; ")}` : undefined, status: "received", trackingCode, followUpTokenHash: await tokenHash(token),
       deviceHash: args.deviceHash, latitude: args.latitude, longitude: args.longitude, accuracyM: args.accuracyM,
       stationId: station?._id, district: area?.district ?? station?.district, subcounty: area?.subcounty ?? station?.subcounty, parish: area?.parish ?? station?.parish,
       verified: false, createdAt: now, updatedAt: now,
       reporterId, shareIdentity: reporterId ? args.shareIdentity === true : undefined,
-      priority: defaultPriority(category),
+      priority: known?.priority ?? "p4",
       referenceNumber: await nextReferenceNumber(ctx, station?.district, now),
     });
     for (const item of args.media) await ctx.db.insert("reportMedia", { reportId, storageId: item.storageId, kind: item.kind, createdAt: now });

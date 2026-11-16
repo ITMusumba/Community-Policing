@@ -5,7 +5,8 @@ import { useQuery } from "convex/react";
 import { AlertTriangle } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import PoliceShell from "@/components/PoliceShell";
-import { CATEGORY_LABEL, elapsed } from "@/lib/police";
+import { useCategories } from "@/lib/categories";
+import { elapsed } from "@/lib/police";
 
 export default function DashboardPage() {
   return <PoliceShell active="dashboard">{() => <Dashboard />}</PoliceShell>;
@@ -15,6 +16,7 @@ const fmtMin = (m: number | null) => (m === null ? "—" : elapsed(m * 60_000));
 const fmtHrs = (h: number | null) => (h === null ? "—" : elapsed(h * 3_600_000));
 
 function Dashboard() {
+  const { formal } = useCategories();
   const [district, setDistrict] = useState("");
   const [days, setDays] = useState(30);
   const data = useQuery(api.dashboard.summary, { district: district || undefined, days });
@@ -62,7 +64,7 @@ function Dashboard() {
     </Panel>
 
     <div className="grid gap-5 md:grid-cols-2">
-      <Panel title="Incidents by category"><BarTable rows={data.categories.map(c => ({ label: CATEGORY_LABEL[c.category] ?? c.category, count: c.count }))} /></Panel>
+      <Panel title="Incidents by category"><BarTable rows={data.categories.map(c => ({ label: formal(c.category), count: c.count }))} /></Panel>
       <Panel title="Hotspots (top 10 locations)"><BarTable rows={data.hotspots.map(h => ({ label: h.place, count: h.count }))} /></Panel>
     </div>
     <p className="text-xs text-slate-500">Overdue = open incidents with no police response within the priority target (P1 30 min, P2 2 h, P3 24 h, P4 72 h).</p>

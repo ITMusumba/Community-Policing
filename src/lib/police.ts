@@ -1,5 +1,7 @@
 // Formal wording and response-time rules for police and admin screens (see apprules.md, "Professional standard").
 
+import { BUILTIN_CATEGORIES } from "@/convex/lib/categories";
+
 export type Priority = "p1" | "p2" | "p3" | "p4";
 
 /** Minutes allowed before the first police response. Keep in sync with PRIORITY_TARGET_MIN in convex/reports.ts. */
@@ -10,13 +12,8 @@ export const PRIORITY: Record<Priority, { short: string; label: string; targetMi
   p4: { short: "P4", label: "P4 · Low (72 h)", targetMin: 4320, badge: "bg-slate-300 text-slate-900" },
 };
 
-export const CATEGORY_LABEL: Record<string, string> = {
-  theft: "Theft", robbery: "Robbery", assault: "Assault", domestic_violence: "Domestic violence",
-  sexual_violence: "Sexual offence", accident: "Road traffic accident", fire: "Fire", drugs: "Narcotics",
-  suspicious_activity: "Suspicious activity", livestock_theft: "Livestock theft",
-  land_property_dispute: "Land / property dispute", arson: "Arson", illegal_dumping: "Illegal dumping", terrorism: "Terrorism / explosive threat",
-  crop_theft: "Crop theft", child_abuse: "Child abuse", other: "Other",
-};
+/** Formal names of the built-in categories. Screens use useCategories().formal(), which also knows admin-added ones. */
+export const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(BUILTIN_CATEGORIES.map(c => [c.key, c.formal ?? c.label]));
 
 export const STATUS_LABEL = {
   received: "New", seen: "Acknowledged", assigned: "Assigned", en_route: "Dispatched",

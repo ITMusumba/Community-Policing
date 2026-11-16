@@ -9,12 +9,14 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as categories from "../categories.js";
 import type * as citizen from "../citizen.js";
 import type * as complaints from "../complaints.js";
 import type * as dashboard from "../dashboard.js";
 import type * as geo from "../geo.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_categories from "../lib/categories.js";
 import type * as lib_geo from "../lib/geo.js";
 import type * as messages from "../messages.js";
 import type * as notices from "../notices.js";
@@ -32,12 +34,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  categories: typeof categories;
   citizen: typeof citizen;
   complaints: typeof complaints;
   dashboard: typeof dashboard;
   geo: typeof geo;
   http: typeof http;
   "lib/auth": typeof lib_auth;
+  "lib/categories": typeof lib_categories;
   "lib/geo": typeof lib_geo;
   messages: typeof messages;
   notices: typeof notices;

@@ -7,7 +7,8 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import ChangePassword from "@/components/ChangePassword";
 import { errorMessage } from "@/lib/errors";
-import { CATEGORY_LABEL, STATUS_LABEL } from "@/lib/police";
+import { useCategories } from "@/lib/categories";
+import { STATUS_LABEL } from "@/lib/police";
 
 type Report = FunctionReturnType<typeof api.citizen.myReports>[number];
 const CLOSED = ["closed", "duplicate", "false"];
@@ -79,6 +80,7 @@ export default function CitizenPage() {
 }
 
 function ReportCard({ report: r, open, onToggle }: { report: Report; open: boolean; onToggle: () => void }) {
+  const { label } = useCategories();
   const markSeen = useMutation(api.citizen.markSeen);
   const addNote = useMutation(api.citizen.addNote);
   const [body, setBody] = useState("");
@@ -96,7 +98,7 @@ function ReportCard({ report: r, open, onToggle }: { report: Report; open: boole
   return <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
     <button onClick={onToggle} aria-expanded={open} className="flex w-full items-start justify-between gap-3 p-4 text-left">
       <div className="min-w-0">
-        <p className="font-bold">{CATEGORY_LABEL[r.category] ?? r.category}</p>
+        <p className="font-bold">{label(r.category)}</p>
         <p className="truncate text-xs text-slate-500">{r.trackingCode} · {fmt(r.createdAt)}{r.place ? ` · ${r.place}` : ""}</p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">

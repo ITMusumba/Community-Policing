@@ -9,9 +9,9 @@ import type { Doc } from "@/convex/_generated/dataModel";
 import PoliceShell from "@/components/PoliceShell";
 import IncidentMap from "@/components/IncidentMap";
 import { errorMessage } from "@/lib/errors";
-import { CATEGORY_LABEL, PRIORITY, STATUS_LABEL, elapsed, responseState, type Priority } from "@/lib/police";
+import { useCategories } from "@/lib/categories";
+import { PRIORITY, STATUS_LABEL, elapsed, responseState, type Priority } from "@/lib/police";
 
-const cats = ["theft","robbery","assault","domestic_violence","child_abuse","sexual_violence","accident","fire","drugs","suspicious_activity","livestock_theft","crop_theft","land_property_dispute","arson","illegal_dumping","terrorism","other"] as const;
 const statuses = ["received","seen","assigned","en_route","closed","duplicate","false"] as const;
 type Outcome = "close" | "duplicate" | "false";
 const OUTCOMES: Record<Outcome, { title: string; reasons: string[] }> = {
@@ -29,13 +29,14 @@ function IncidentFeed({ profile }: { profile: Doc<"userProfiles"> }) {
   const [subcounty, setSubcounty] = useState("");
   const [parish, setParish] = useState("");
   const [category, setCategory] = useState("");
+  const cats = useCategories();
   const [status, setStatus] = useState("");
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(t); }, []);
 
   const feed = useQuery(api.reports.officerFeed, {
     district: district || undefined, subcounty: subcounty || undefined, parish: parish || undefined,
-    category: category ? category as typeof cats[number] : undefined, status: status ? status as typeof statuses[number] : undefined,
+    category: category || undefined, status: status ? status as typeof statuses[number] : undefined,
   });
   const reports = useMemo(() => feed ?? [], [feed]);
   // Full Uganda list, so an officer can look at any district even before it has reports.
@@ -61,7 +62,7 @@ function IncidentFeed({ profile }: { profile: Doc<"userProfiles"> }) {
         <select aria-label="District" value={district} onChange={e=>{setDistrict(e.target.value);setSubcounty("");setParish("");}} className={select}><option value="">All districts</option>{districts.map(x=><option key={x}>{x}</option>)}</select>
         <select aria-label="Subcounty" value={subcounty} onChange={e=>{setSubcounty(e.target.value);setParish("");}} className={select}><option value="">All subcounties</option>{subcounties.map(x=><option key={x}>{x}</option>)}</select>
         <select aria-label="Parish" value={parish} onChange={e=>setParish(e.target.value)} className={select}><option value="">All parishes</option>{parishes.map(x=><option key={x}>{x}</option>)}</select>
-        <select aria-label="Category" value={category} onChange={e=>setCategory(e.target.value)} className={select}><option value="">All categories</option>{cats.map(x=><option key={x} value={x}>{CATEGORY_LABEL[x]}</option>)}</select>
+        <select aria-label="Category" value={category} onChange={e=>setCategory(e.target.value)} className={select}><option value="">All categories</option>{cats.all.map(c=><option key={c.key} value={c.key}>{c.formal ?? c.label}{c.active ? "" : " (hidden)"}</option>)}</select>
         <select aria-label="Status" value={status} onChange={e=>setStatus(e.target.value)} className={select}><option value="">All statuses</option>{statuses.map(x=><option key={x} value={x}>{STATUS_LABEL[x]}</option>)}</select>
         <button onClick={() => setShowFilters(false)} className="min-h-11 rounded bg-[#0b1f33] text-sm font-medium text-white sm:col-span-2">Apply</button>
       </div>
@@ -77,6 +78,7 @@ function IncidentFeed({ profile }: { profile: Doc<"userProfiles"> }) {
 type FeedRow = FunctionReturnType<typeof api.reports.officerFeed>[number];
 
 function IncidentCard({ report: r, now }: { report: FeedRow; now: number }) {
+  const { formal } = useCategories();
   const action = useMutation(api.reports.officerAction);
   const sendReply = useMutation(api.reports.replyToAnonymousReport);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -106,7 +108,7 @@ function IncidentCard({ report: r, now }: { report: FeedRow; now: number }) {
 
     <div className="px-4 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold">{CATEGORY_LABEL[r.category]}</h2>
+        <h2 className="text-lg font-semibold">{formal(r.category)}</h2>
         <p className="flex items-center gap-1 text-sm text-slate-600"><Clock size={14} aria-hidden="true" />Received {elapsed(now - r.createdAt)} ago · {new Date(r.createdAt).toLocaleString("en-UG", { dateStyle: "medium", timeStyle: "short" })}</p>
       </div>
       {r.supportNote && <p className="mt-2 flex items-center gap-1.5 rounded border border-amber-400 bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-900"><AlertTriangle size={15} aria-hidden="true" />{r.supportNote}</p>}

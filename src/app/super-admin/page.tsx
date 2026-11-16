@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { ArrowRightLeft, ChevronDown, ChevronUp, FileText, KeyRound, Lock, UserPlus, UserX } from "lucide-react";
+import { ArrowDown, ArrowRightLeft, ArrowUp, ChevronDown, ChevronUp, FileText, KeyRound, Lock, Plus, Tags, UserPlus, UserX } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import PoliceShell from "@/components/PoliceShell";
 import StationOptions from "@/components/StationOptions";
 import { errorMessage } from "@/lib/errors";
-import { CATEGORY_LABEL, PRIORITY, STATUS_LABEL, type Priority } from "@/lib/police";
+import { PRIORITY, STATUS_LABEL, type Priority } from "@/lib/police";
+import { CategoryIcon, useCategories, type CategoryDef } from "@/lib/categories";
 
 type User = FunctionReturnType<typeof api.superAdmin.listUsers>[number];
 const ROLE_LABEL: Record<string, string> = { citizen: "Citizen", officer: "Officer", admin: "Commander / Admin", super_admin: "Super-admin" };
@@ -18,9 +19,12 @@ const btn = "flex min-h-10 items-center justify-center gap-1.5 rounded border px
 const fmt = (t: number) => new Date(t).toLocaleString("en-UG", { dateStyle: "medium", timeStyle: "short" });
 
 export default function SuperAdminPage() {
+  // Commanders/admins manage incident categories; personnel administration stays with super-admins.
   return <PoliceShell active="admin">{profile => profile.role === "super_admin"
-    ? <Administration selfId={profile._id} />
-    : <p className="p-6 text-sm text-slate-700">Super-admin access only.</p>}</PoliceShell>;
+    ? <><Administration selfId={profile._id} /><div className="mx-auto max-w-4xl px-4 pb-8"><Categories /></div></>
+    : profile.role === "admin"
+      ? <div className="mx-auto max-w-4xl px-4 py-4"><Categories /></div>
+      : <p className="p-6 text-sm text-slate-700">Administrator access only.</p>}</PoliceShell>;
 }
 
 function Administration({ selfId }: { selfId: Id<"userProfiles"> }) {
@@ -205,12 +209,13 @@ function UserPanel({ user, users, selfId }: { user: User; users: User[]; selfId:
 
 type Case = FunctionReturnType<typeof api.superAdmin.officerRecord>["openCases"][number];
 function CaseTable({ cases, empty }: { cases: Case[]; empty: string }) {
+  const { formal } = useCategories();
   if (!cases.length) return <p className="text-slate-500">{empty}</p>;
   return <div className="overflow-x-auto rounded border border-slate-300 bg-white"><table className="w-full text-xs">
     <thead className="bg-slate-50 text-left uppercase tracking-wide text-slate-600"><tr><th className="px-2 py-1.5">Reference</th><th className="px-2 py-1.5">Pri.</th><th className="px-2 py-1.5">Category</th><th className="px-2 py-1.5">Status</th><th className="hidden px-2 py-1.5 sm:table-cell">Location</th><th className="px-2 py-1.5">Received</th></tr></thead>
     <tbody className="divide-y divide-slate-100">{cases.map(c => <tr key={c._id}>
       <td className="px-2 py-1.5 font-mono">{c.ref}</td><td className="px-2 py-1.5">{PRIORITY[c.priority as Priority].short}</td>
-      <td className="px-2 py-1.5">{CATEGORY_LABEL[c.category] ?? c.category}</td><td className="px-2 py-1.5">{STATUS_LABEL[c.status as keyof typeof STATUS_LABEL] ?? c.status}</td>
+      <td className="px-2 py-1.5">{formal(c.category)}</td><td className="px-2 py-1.5">{STATUS_LABEL[c.status as keyof typeof STATUS_LABEL] ?? c.status}</td>
       <td className="hidden px-2 py-1.5 sm:table-cell">{c.place || "—"}</td><td className="px-2 py-1.5 whitespace-nowrap">{fmt(c.createdAt)}</td></tr>)}</tbody>
   </table></div>;
 }
@@ -266,5 +271,89 @@ function AddStaff() {
       {error && <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-800 sm:col-span-2">{error}</p>}
       <button disabled={busy} className={`${btn} border-slate-800 bg-slate-800 text-white sm:col-span-2`}>{busy ? "Creating…" : "Create account"}</button>
     </form>}
+  </section>;
+}
+
+// Emoji that show on Android 9 and newer (Emoji 11 or older), offered as quick picks.
+const EMOJI_PICKS = ["🗑️", "🚯", "🌳", "🌲", "🔥", "💧", "🌊", "☠️", "🏭", "💨", "⛏️", "🚜", "🚛", "🏗️", "🚧", "🐟", "🐊", "🐘", "🦏", "🐒", "🦁", "🦜", "🏹", "📢", "🛍️", "🧪", "🐄", "🐐", "🌾", "🏠", "🚗", "💰", "💊", "🔪", "⚠️", "❔"];
+const GROUP_LABEL = { environment: "Environmental", general: "Other crime" } as const;
+type Draft = { key?: string; label: string; emoji: string; group: CategoryDef["group"]; priority: Priority; main: boolean; active: boolean };
+const EMPTY: Draft = { label: "", emoji: "", group: "environment", priority: "p3", main: true, active: true };
+
+/** Incident types citizens pick from on "What happened?". Built-in ones can be renamed, re-pictured, moved or hidden. */
+function Categories() {
+  const cats = useCategories();
+  const save = useMutation(api.categories.save);
+  const reset = useMutation(api.categories.resetBuiltin);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const field = "min-h-11 w-full min-w-0 rounded border border-slate-300 bg-white px-2 text-sm";
+
+  async function run(fn: () => Promise<unknown>, done: string) {
+    setBusy(true); setMsg(null);
+    try { await fn(); setMsg({ ok: true, text: done }); setDraft(null); }
+    catch (e) { setMsg({ ok: false, text: errorMessage(e, "Could not save the category.") }); }
+    finally { setBusy(false); }
+  }
+  const asArgs = (c: CategoryDef) => ({ key: c.key, label: c.label, emoji: c.emoji, group: c.group, priority: c.priority, main: c.main, active: c.active, order: c.order });
+  // Swap places with the neighbour in the same list.
+  function move(list: CategoryDef[], i: number, by: -1 | 1) {
+    const a = list[i], b = list[i + by];
+    if (!a || !b) return;
+    void run(async () => { await save({ ...asArgs(a), order: b.order }); await save({ ...asArgs(b), order: a.order === b.order ? a.order + by : a.order }); }, `Moved ${a.label}.`);
+  }
+
+  const section = (title: string, list: CategoryDef[]) => <div>
+    <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
+    <ul className="divide-y divide-slate-100 rounded border border-slate-300 bg-white">{list.map((c, i) => <li key={c.key} className={`flex items-center gap-2 px-2 py-1.5 ${c.active ? "" : "opacity-50"}`}>
+      <span className="flex w-12 shrink-0 justify-center"><CategoryIcon cat={c} size="sm" /></span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{c.label}{!c.active && <span className="text-xs text-slate-500"> · hidden</span>}</p>
+        <p className="truncate text-xs text-slate-500">{GROUP_LABEL[c.group]} · {PRIORITY[c.priority].short}{c.builtin ? "" : " · added"}</p>
+      </div>
+      <button disabled={busy || i === 0} onClick={() => move(list, i, -1)} aria-label={`Move ${c.label} up`} className="flex h-9 w-9 items-center justify-center rounded border border-slate-300 disabled:opacity-30"><ArrowUp size={14} /></button>
+      <button disabled={busy || i === list.length - 1} onClick={() => move(list, i, 1)} aria-label={`Move ${c.label} down`} className="flex h-9 w-9 items-center justify-center rounded border border-slate-300 disabled:opacity-30"><ArrowDown size={14} /></button>
+      <button onClick={() => { setMsg(null); setDraft({ key: c.key, label: c.label, emoji: c.emoji, group: c.group, priority: c.priority, main: c.main, active: c.active }); }} className={`${btn} border-slate-300 bg-white`}>Edit</button>
+    </li>)}</ul>
+  </div>;
+
+  const editing = draft?.key ? cats.byKey.get(draft.key) : undefined;
+  return <section className="space-y-3 pt-6">
+    <div className="flex flex-wrap items-end justify-between gap-2">
+      <div><h2 className="flex items-center gap-2 text-lg font-semibold"><Tags size={18} aria-hidden="true" />Incident categories</h2>
+        <p className="text-sm text-slate-600">The pictures citizens tap on &ldquo;What happened?&rdquo;. &ldquo;Shown first&rdquo; appear straight away; the rest are under &ldquo;See more&rdquo;. Every change is audit-logged.</p></div>
+      <button onClick={() => { setMsg(null); setDraft({ ...EMPTY }); }} className={`${btn} border-slate-800 bg-slate-800 text-white`}><Plus size={15} aria-hidden="true" />Add category</button>
+    </div>
+    {msg && <p role={msg.ok ? "status" : "alert"} className={`rounded px-3 py-2 text-sm ${msg.ok ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-800"}`}>{msg.text}</p>}
+
+    {draft && <form onSubmit={e => { e.preventDefault(); void run(() => save({ key: draft.key, label: draft.label, emoji: draft.emoji, group: draft.group, priority: draft.priority, main: draft.main, active: draft.active }), draft.key ? "Category updated." : "Category added."); }}
+      className="space-y-2 rounded border-2 border-slate-400 bg-white p-3">
+      <p className="font-semibold">{draft.key ? `Edit “${editing?.label ?? draft.label}”` : "New category"}</p>
+      <div className="flex items-center gap-3">
+        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border-2 border-slate-300 bg-slate-50">{draft.emoji ? <CategoryIcon cat={{ key: draft.key ?? "", emoji: draft.emoji }} size="lg" /> : <span className="text-xs text-slate-400">Picture</span>}</span>
+        <div className="grid flex-1 gap-2 sm:grid-cols-2">
+          <input required minLength={2} maxLength={40} placeholder="Name citizens see, e.g. Charcoal burning" aria-label="Name" value={draft.label} onChange={e => setDraft({ ...draft, label: e.target.value })} className={field} />
+          <input required maxLength={24} placeholder="Emoji, e.g. 🌳🔥" aria-label="Emoji" value={draft.emoji} onChange={e => setDraft({ ...draft, emoji: e.target.value })} className={`${field} text-xl`} />
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1" aria-label="Quick emoji picks">{EMOJI_PICKS.map(e => <button type="button" key={e} onClick={() => setDraft({ ...draft, emoji: (draft.emoji.length < 8 ? draft.emoji : "") + e })} className="h-10 w-10 rounded border border-slate-200 text-xl hover:bg-slate-100">{e}</button>)}
+        <button type="button" onClick={() => setDraft({ ...draft, emoji: "" })} className="h-10 rounded border border-slate-200 px-2 text-xs">Clear</button></div>
+      <p className="text-xs text-slate-500">Use one or two pictures that someone who cannot read would recognise. Newer emoji may show as empty boxes on older phones.</p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <select aria-label="Group" value={draft.group} onChange={e => setDraft({ ...draft, group: e.target.value as Draft["group"] })} className={field}><option value="environment">Environmental crime</option><option value="general">Other crime</option></select>
+        <select aria-label="Starting priority" value={draft.priority} onChange={e => setDraft({ ...draft, priority: e.target.value as Priority })} className={field}>{(Object.keys(PRIORITY) as Priority[]).map(p => <option key={p} value={p}>{PRIORITY[p].label}</option>)}</select>
+        <select aria-label="Placement" value={draft.main ? "main" : "more"} onChange={e => setDraft({ ...draft, main: e.target.value === "main" })} className={field}><option value="main">Shown first</option><option value="more">Under &ldquo;See more&rdquo;</option></select>
+      </div>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.active} disabled={draft.key === "other"} onChange={e => setDraft({ ...draft, active: e.target.checked })} className="h-5 w-5" />Visible to citizens{draft.key === "other" && " (Other is always visible)"}</label>
+      <div className="flex flex-wrap gap-2">
+        <button disabled={busy} className={`${btn} border-slate-800 bg-slate-800 text-white`}>{busy ? "Saving…" : "Save"}</button>
+        <button type="button" onClick={() => setDraft(null)} className={`${btn} border-slate-300 bg-white`}>Cancel</button>
+        {editing?.builtin && <button type="button" disabled={busy} onClick={() => void run(() => reset({ key: editing.key }), "Category reset to the original.")} className={`${btn} border-slate-300 bg-white`}>Reset to original</button>}
+      </div>
+    </form>}
+
+    {section("Shown first", cats.all.filter(c => c.main))}
+    {section("Under “See more”", cats.all.filter(c => !c.main))}
   </section>;
 }
